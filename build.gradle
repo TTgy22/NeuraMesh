@@ -1,0 +1,63 @@
+plugins {
+    id 'java'
+    id 'jacoco'
+    id 'com.diffplug.spotless' version '6.25.0' apply false
+}
+
+allprojects {
+    group = 'com.neuramesh'
+    version = '0.1.0-SNAPSHOT'
+
+    repositories {
+        // 腾讯云镜像优先，加速依赖下载
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'jacoco'
+    apply plugin: 'com.diffplug.spotless'
+
+    // 统一 Java 17 编译目标（当前 Gradle 守护进程运行于 JDK 17，无需 toolchain 下载）
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.compilerArgs << '-Xlint:all'
+    }
+
+    jacoco {
+        toolVersion = '0.8.12'
+    }
+
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.11.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testImplementation 'org.assertj:assertj-core:3.27.3'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    test {
+        useJUnitPlatform()
+        testLogging {
+            events 'passed', 'skipped', 'failed'
+            exceptionFormat 'full'
+        }
+    }
+
+    // Spotless：轻量级格式化规则，无需外部 formatter 二进制，规避网络与 JDK 导出参数问题
+    spotless {
+        java {
+            target 'src/**/*.java'
+            importOrder()
+            trimTrailingWhitespace()
+            leadingTabsToSpaces(4)
+            endWithNewline()
+        }
+    }
+}

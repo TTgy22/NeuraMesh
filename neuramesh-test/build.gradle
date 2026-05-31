@@ -1,0 +1,21 @@
+plugins {
+    // 跨模块聚合覆盖率报告（tests 集中在本模块，需聚合 core/storage 的覆盖率）
+    id 'jacoco-report-aggregation'
+}
+
+dependencies {
+    testImplementation project(':neuramesh-core')
+    testImplementation project(':neuramesh-storage')
+
+    // 聚合 core/storage 模块的字节码与源码以计算覆盖率
+    jacocoAggregation project(':neuramesh-core')
+    jacocoAggregation project(':neuramesh-storage')
+
+    // 测试运行期日志实现
+    testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.18'
+}
+
+// 运行 test 后自动生成聚合覆盖率报告
+tasks.named('test') {
+    finalizedBy tasks.named('testCodeCoverageReport')
+}

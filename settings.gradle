@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories {
+        // 插件仓库镜像（腾讯云聚合了 gradle-plugin-portal）
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/gradle-plugins/' }
+        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'neuramesh'
+
+include 'neuramesh-core'
+include 'neuramesh-storage'
+include 'neuramesh-test'

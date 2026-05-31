@@ -1,0 +1,7 @@
+dependencies {
+    // 依赖 core 模块（NeuraException、CryptoUtils 等）
+    api project(':neuramesh-core')
+    // 存储：RocksDB 8.x（技术栈约束锁定 8.x，使用最新 8.11.4）
+    implementation 'org.rocksdb:rocksdbjni:8.11.4'
+    implementation 'org.slf4j:slf4j-api:2.0.17'
+}
