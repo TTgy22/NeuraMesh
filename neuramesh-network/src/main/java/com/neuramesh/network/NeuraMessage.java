@@ -27,6 +27,10 @@ public abstract class NeuraMessage {
     public static final byte TYPE_PING             = 0x04;
     public static final byte TYPE_PONG             = 0x05;
     public static final byte TYPE_HELLO            = 0x06;
+    // BFT 共识三阶段（0x06 已被 HELLO 占用，故顺延至 0x07/0x08/0x09）
+    public static final byte TYPE_PRE_PREPARE      = 0x07;
+    public static final byte TYPE_PREPARE          = 0x08;
+    public static final byte TYPE_COMMIT           = 0x09;
 
     private UUID messageId;
     private long timestamp;

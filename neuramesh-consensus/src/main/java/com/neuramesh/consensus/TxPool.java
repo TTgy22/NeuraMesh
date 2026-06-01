@@ -164,6 +164,18 @@ public final class TxPool {
     }
 
     /**
+     * 为出块取出交易（语义别名，等价于 {@link #getTransactions(int)}）。
+     *
+     * <p>提案人打包时调用；当前实现取出即从池中移除（poll）。提案失败时交易不回滚，列为债务。
+     *
+     * @param maxCount 期望取出数量
+     * @return 交易列表
+     */
+    public List<Transaction> getTransactionsForBlock(int maxCount) {
+        return getTransactions(maxCount);
+    }
+
+    /**
      * 当前待处理交易数。
      *
      * @return 数量

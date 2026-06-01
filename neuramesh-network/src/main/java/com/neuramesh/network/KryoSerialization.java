@@ -6,10 +6,13 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.util.Pool;
 import com.neuramesh.network.messages.BlocksResponseMessage;
+import com.neuramesh.network.messages.CommitMessage;
 import com.neuramesh.network.messages.GetBlocksRequestMessage;
 import com.neuramesh.network.messages.HelloMessage;
 import com.neuramesh.network.messages.PingMessage;
 import com.neuramesh.network.messages.PongMessage;
+import com.neuramesh.network.messages.PrePrepareMessage;
+import com.neuramesh.network.messages.PrepareMessage;
 import com.neuramesh.network.messages.TransactionGossipMessage;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,6 +59,9 @@ public final class KryoSerialization {
             kryo.register(PingMessage.class);
             kryo.register(PongMessage.class);
             kryo.register(HelloMessage.class);
+            kryo.register(PrePrepareMessage.class);
+            kryo.register(PrepareMessage.class);
+            kryo.register(CommitMessage.class);
             return kryo;
         }
     };

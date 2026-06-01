@@ -1,10 +1,13 @@
 package com.neuramesh.network;
 
 import com.neuramesh.network.messages.BlocksResponseMessage;
+import com.neuramesh.network.messages.CommitMessage;
 import com.neuramesh.network.messages.GetBlocksRequestMessage;
 import com.neuramesh.network.messages.HelloMessage;
 import com.neuramesh.network.messages.PingMessage;
 import com.neuramesh.network.messages.PongMessage;
+import com.neuramesh.network.messages.PrePrepareMessage;
+import com.neuramesh.network.messages.PrepareMessage;
 import com.neuramesh.network.messages.TransactionGossipMessage;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +35,9 @@ public final class MessageRegistry {
         register(NeuraMessage.TYPE_PING,            PingMessage.class,              PingMessage::new);
         register(NeuraMessage.TYPE_PONG,            PongMessage.class,              PongMessage::new);
         register(NeuraMessage.TYPE_HELLO,           HelloMessage.class,             HelloMessage::new);
+        register(NeuraMessage.TYPE_PRE_PREPARE,     PrePrepareMessage.class,        PrePrepareMessage::new);
+        register(NeuraMessage.TYPE_PREPARE,         PrepareMessage.class,           PrepareMessage::new);
+        register(NeuraMessage.TYPE_COMMIT,          CommitMessage.class,            CommitMessage::new);
     }
 
     private MessageRegistry() {
