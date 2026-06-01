@@ -11,4 +11,6 @@ rootProject.name = 'neuramesh'
 
 include 'neuramesh-core'
 include 'neuramesh-storage'
+include 'neuramesh-consensus'
+include 'neuramesh-network'
 include 'neuramesh-test'

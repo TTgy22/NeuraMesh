@@ -1,0 +1,16 @@
+dependencies {
+    // 网络层依赖 core / storage / consensus
+    api project(':neuramesh-core')
+    api project(':neuramesh-storage')
+    api project(':neuramesh-consensus')
+
+    // Netty 4.1.x（异步 NIO）
+    implementation 'io.netty:netty-handler:4.1.121.Final'
+    implementation 'io.netty:netty-codec:4.1.121.Final'
+    implementation 'io.netty:netty-transport:4.1.121.Final'
+
+    // Kryo 5.x（沿用 P0 中已声明的 5.6.2，避免依赖版本漂移）
+    implementation 'com.esotericsoftware:kryo:5.6.2'
+
+    implementation 'org.slf4j:slf4j-api:2.0.17'
+}

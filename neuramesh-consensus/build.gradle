@@ -1,0 +1,5 @@
+dependencies {
+    // 共识/交易池模块仅依赖 core（Transaction、CryptoUtils、NeuraException）
+    api project(':neuramesh-core')
+    implementation 'org.slf4j:slf4j-api:2.0.17'
+}
