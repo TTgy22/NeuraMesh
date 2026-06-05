@@ -156,6 +156,46 @@ public final class RocksDBStore implements AutoCloseable {
     }
 
     /**
+     * 写入账户状态（{@link ColumnFamilies#STATE} 分区便捷方法）。
+     *
+     * @param key   状态键
+     * @param value 状态值
+     */
+    public void putState(byte[] key, byte[] value) {
+        put(ColumnFamilies.STATE, key, value);
+    }
+
+    /**
+     * 读取账户状态。
+     *
+     * @param key 状态键
+     * @return 值（不存在返回 null）
+     */
+    public byte[] getState(byte[] key) {
+        return get(ColumnFamilies.STATE, key);
+    }
+
+    /**
+     * 写入节点状态（{@link ColumnFamilies#NODES} 分区便捷方法）。
+     *
+     * @param key   节点键
+     * @param value 节点值
+     */
+    public void putNode(byte[] key, byte[] value) {
+        put(ColumnFamilies.NODES, key, value);
+    }
+
+    /**
+     * 读取节点状态。
+     *
+     * @param key 节点键
+     * @return 值（不存在返回 null）
+     */
+    public byte[] getNode(byte[] key) {
+        return get(ColumnFamilies.NODES, key);
+    }
+
+    /**
      * 数据目录路径。
      *
      * @return 数据目录

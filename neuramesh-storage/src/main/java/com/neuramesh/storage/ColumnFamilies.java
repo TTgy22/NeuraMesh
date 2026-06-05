@@ -14,6 +14,7 @@ public enum ColumnFamilies {
     BLOCKS("blocks"),
     TRANSACTIONS("transactions"),
     STATE("state"),
+    NODES("nodes"),
     META("meta");
 
     private final String prefix;

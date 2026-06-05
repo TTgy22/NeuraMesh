@@ -8,12 +8,16 @@ dependencies {
     testImplementation project(':neuramesh-storage')
     testImplementation project(':neuramesh-consensus')
     testImplementation project(':neuramesh-network')
+    testImplementation project(':neuramesh-vm')
+    testImplementation project(':neuramesh-benchmark')
 
     // 聚合所有业务模块的字节码与源码以计算覆盖率
     jacocoAggregation project(':neuramesh-core')
     jacocoAggregation project(':neuramesh-storage')
     jacocoAggregation project(':neuramesh-consensus')
     jacocoAggregation project(':neuramesh-network')
+    jacocoAggregation project(':neuramesh-vm')
+    jacocoAggregation project(':neuramesh-benchmark')
 
     // 测试运行期日志实现
     testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.18'
