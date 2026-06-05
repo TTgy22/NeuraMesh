@@ -25,3 +25,10 @@ data/
 *.sst
 *.log.gz
 LOCK
+
+# Frontend (Node/Electron)
+node_modules/
+dist/
+dist-main/
+.vite/
+*.tsbuildinfo

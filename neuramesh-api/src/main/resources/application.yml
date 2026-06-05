@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: neuramesh-api
+
+neuramesh:
+  cors:
+    allowed-origins:
+      - "http://localhost:5173"   # dashboard (Vite)
+      - "http://localhost:5174"   # node renderer (Vite)
+      - "app://."                 # Electron packaged
+
+logging:
+  level:
+    com.neuramesh: INFO

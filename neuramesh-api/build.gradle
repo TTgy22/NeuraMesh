@@ -1,0 +1,32 @@
+plugins {
+    id 'org.springframework.boot' version '3.2.10'
+    id 'io.spring.dependency-management' version '1.1.6'
+}
+
+// 根项目测试运行期固定 logback 1.5.18，但 Spring Boot 3.2.x 依赖 logback 1.4.x 的内部 API
+// （LoggerContext.getConfigurationLock）。本模块强制 logback 回落到 Spring Boot 管理的 1.4.14。
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'ch.qos.logback') {
+            details.useVersion '1.4.14'
+            details.because 'Spring Boot 3.2.x 需要 logback 1.4.x'
+        }
+    }
+}
+
+dependencies {
+    api project(':neuramesh-core')
+    api project(':neuramesh-storage')
+    api project(':neuramesh-consensus')
+    api project(':neuramesh-vm')
+    api project(':neuramesh-benchmark')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    testImplementation('org.springframework.boot:spring-boot-starter-test') {
+        exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+    }
+}
+
+// Spring Boot 应用：禁用普通 jar 的同时保留 bootJar
+tasks.named('jar') { enabled = false }
