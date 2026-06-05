@@ -2,6 +2,7 @@ package com.neuramesh.api.controller;
 
 import com.neuramesh.api.common.ApiResponse;
 import com.neuramesh.api.dto.BlockInfoDTO;
+import com.neuramesh.api.dto.ChainStatsDTO;
 import com.neuramesh.api.dto.TxInfoDTO;
 import com.neuramesh.api.service.ChainService;
 import com.neuramesh.core.CryptoUtils;
@@ -25,6 +26,11 @@ public class ChainController {
 
     public ChainController(ChainService chainService) {
         this.chainService = chainService;
+    }
+
+    @GetMapping("/stats")
+    public ApiResponse<ChainStatsDTO> stats() {
+        return ApiResponse.ok(chainService.stats());
     }
 
     @GetMapping("/blocks")

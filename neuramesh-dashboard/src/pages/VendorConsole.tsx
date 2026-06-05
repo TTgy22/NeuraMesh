@@ -2,7 +2,7 @@ import { useState } from "react";
 import { TaskForm } from "../components/TaskForm";
 import { api, type TaskStatus } from "../api";
 
-// notion-pre-ai：米白页面 + 友好排版
+// 统一科技黑主题
 export function VendorConsole() {
   const [vendorId] = useState("acme-corp");
   const [history, setHistory] = useState<TaskStatus[]>([]);
@@ -19,23 +19,23 @@ export function VendorConsole() {
   }
 
   return (
-    <div style={{ background: "var(--paper)", color: "var(--ink)", minHeight: "100vh", padding: "var(--space-6)" }}>
-      <h1 className="display" style={{ fontWeight: 700 }}>厂商控制台</h1>
-      <p style={{ color: "var(--ink-muted)" }}>发布算力任务，按节点权重自动结算到链上。厂商：<span className="mono">{vendorId}</span></p>
+    <div style={{ minHeight: "100vh", padding: "var(--space-5)" }}>
+      <h1 className="display">厂商控制台</h1>
+      <p style={{ color: "var(--muted)" }}>发布算力任务，按节点权重自动结算到链上。厂商：<span className="mono" style={{ color: "var(--accent)" }}>{vendorId}</span></p>
       <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: "var(--space-5)", marginTop: "var(--space-4)" }}>
         <TaskForm onSubmit={submit} />
         <div>
-          <h3>历史任务</h3>
+          <h3 className="display">历史任务</h3>
           {error && <div style={{ color: "var(--danger)" }}>提交失败：{error}</div>}
-          {history.length === 0 && <p style={{ color: "var(--ink-muted)" }}>暂无任务</p>}
+          {history.length === 0 && <p style={{ color: "var(--muted)" }}>暂无任务</p>}
           {history.map((t) => (
-            <div key={t.taskId} style={{ background: "white", border: "1px solid var(--paper-border)",
+            <div key={t.taskId} style={{ background: "var(--panel)", border: "1px solid var(--border)",
               borderRadius: 8, padding: "var(--space-3)", marginBottom: "var(--space-2)" }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span className="mono">{t.taskId}</span>
-                <span style={{ color: t.status === "SETTLED" ? "oklch(45% 0.12 150)" : "var(--danger)" }}>{t.status}</span>
+                <span style={{ color: t.status === "SETTLED" ? "var(--success)" : "var(--danger)" }}>{t.status}</span>
               </div>
-              <div style={{ color: "var(--ink-muted)", fontSize: 13 }}>
+              <div style={{ color: "var(--muted)", fontSize: 13 }}>
                 {t.taskType} · 预算 {t.budget} · 分配 {t.assignedNodes.length} 节点
               </div>
             </div>

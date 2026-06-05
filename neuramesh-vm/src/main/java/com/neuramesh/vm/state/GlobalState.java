@@ -65,6 +65,15 @@ public final class GlobalState {
         return nodes.get(CryptoUtils.toHex(nodeId));
     }
 
+    /**
+     * 所有节点状态快照（只读）。
+     *
+     * @return 节点集合
+     */
+    public java.util.Collection<NodeState> allNodes() {
+        return java.util.Collections.unmodifiableCollection(new java.util.ArrayList<>(nodes.values()));
+    }
+
     public void putNode(NodeState node) {
         nodes.put(node.getNodeIdHex(), node);
     }

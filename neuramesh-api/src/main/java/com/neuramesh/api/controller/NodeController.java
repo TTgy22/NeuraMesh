@@ -33,6 +33,11 @@ public class NodeController {
         return ApiResponse.ok(nodeService.register(model));
     }
 
+    @GetMapping("/list")
+    public ApiResponse<List<NodeStatusDTO>> list() {
+        return ApiResponse.ok(nodeService.allNodeStatuses());
+    }
+
     @GetMapping("/{id}/status")
     public ApiResponse<NodeStatusDTO> status(@PathVariable("id") String id) {
         NodeStatusDTO dto = nodeService.status(id);

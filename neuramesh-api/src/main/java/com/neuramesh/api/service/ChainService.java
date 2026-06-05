@@ -147,4 +147,22 @@ public class ChainService {
     public int blockHeight() {
         return blocks.size();
     }
+
+    /**
+     * 网络聚合统计。
+     *
+     * @return 统计 DTO
+     */
+    public synchronized com.neuramesh.api.dto.ChainStatsDTO stats() {
+        double totalWeight = 0;
+        long totalEarned = 0;
+        var nodes = state.allNodes();
+        for (NodeState n : nodes) {
+            totalWeight += n.getTotalWeight();
+            totalEarned += n.getTotalEarned();
+        }
+        return new com.neuramesh.api.dto.ChainStatsDTO(
+                blocks.size(), txIndex.size(), nodes.size(), state.accountCount(),
+                totalWeight, totalEarned, state.totalBalance());
+    }
 }

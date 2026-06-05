@@ -134,6 +134,22 @@ public class NodeService {
     }
 
     /**
+     * 所有已注册节点的状态列表（用于控制台总览/硬件墙）。
+     *
+     * @return 节点状态列表
+     */
+    public List<NodeStatusDTO> allNodeStatuses() {
+        List<NodeStatusDTO> out = new ArrayList<>();
+        for (String hex : nodeKeys.keySet()) {
+            NodeStatusDTO dto = status(hex);
+            if (dto != null) {
+                out.add(dto);
+            }
+        }
+        return out;
+    }
+
+    /**
      * 在线且权重 &gt; 0 的可参与结算的节点地址列表。
      *
      * @return 节点地址字节列表

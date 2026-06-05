@@ -23,9 +23,15 @@ export interface TaskStatus {
   taskId: string; taskType: string; status: string; budget: number; settleTxId: string | null;
   assignedNodes: string[]; resultUri: string | null;
 }
+export interface ChainStats {
+  blockHeight: number; txCount: number; nodeCount: number; accountCount: number;
+  totalWeight: number; totalEarned: number; totalBalance: number;
+}
 
 export const api = {
   blocks: (limit = 20) => call<BlockInfo[]>(`/chain/blocks?limit=${limit}`),
+  stats: () => call<ChainStats>(`/chain/stats`),
+  nodeList: () => call<NodeStatus[]>(`/node/list`),
   tx: (hash: string) => call<TxInfo>(`/chain/tx/${hash}`),
   submitTask: (vendorId: string, taskType: string, budget: number) =>
     call<TaskStatus>(`/task/submit`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget }) }),
