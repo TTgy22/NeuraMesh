@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type BlockInfo, type TxInfo } from "../api";
 import { TransactionTable } from "../components/TransactionTable";
+import { WeightEarningsChart } from "../components/WeightEarningsChart";
 
 // tufte-dataink：数据密度高，无 chartjunk
 export function BlockExplorer() {
@@ -41,7 +42,10 @@ export function BlockExplorer() {
           <div>nonce: {tx.nonce}</div>
         </div>
       )}
-      <TransactionTable blocks={blocks} />
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "var(--space-3)", alignItems: "start" }}>
+        <TransactionTable blocks={blocks} />
+        <WeightEarningsChart />
+      </div>
     </div>
   );
 }

@@ -1,0 +1,87 @@
+# NeuraMesh 一键启动：4 个种子节点（P2P 网格）+ API 网关 + 控制台前端。
+# 用法（仓库根目录）：docker compose -f docker/docker-compose.yml up --build
+# 注意：构建上下文为仓库根目录（context: ..），以便访问全部 Gradle 模块与前端工程。
+name: neuramesh
+
+services:
+  seed-node-1:
+    build:
+      context: ..
+      dockerfile: docker/seed-node.Dockerfile
+    container_name: neura-seed-1
+    environment:
+      NEURA_PORT: "30000"
+      NEURA_NODE_HEIGHT: "0"
+    ports:
+      - "30001:30000"
+    networks: [neura]
+
+  seed-node-2:
+    build:
+      context: ..
+      dockerfile: docker/seed-node.Dockerfile
+    container_name: neura-seed-2
+    environment:
+      NEURA_PORT: "30000"
+      NEURA_PEERS: "seed-node-1:30000"
+    ports:
+      - "30002:30000"
+    depends_on: [seed-node-1]
+    networks: [neura]
+
+  seed-node-3:
+    build:
+      context: ..
+      dockerfile: docker/seed-node.Dockerfile
+    container_name: neura-seed-3
+    environment:
+      NEURA_PORT: "30000"
+      NEURA_PEERS: "seed-node-1:30000,seed-node-2:30000"
+    ports:
+      - "30003:30000"
+    depends_on: [seed-node-1, seed-node-2]
+    networks: [neura]
+
+  seed-node-4:
+    build:
+      context: ..
+      dockerfile: docker/seed-node.Dockerfile
+    container_name: neura-seed-4
+    environment:
+      NEURA_PORT: "30000"
+      NEURA_PEERS: "seed-node-1:30000,seed-node-2:30000,seed-node-3:30000"
+    ports:
+      - "30004:30000"
+    depends_on: [seed-node-1, seed-node-2, seed-node-3]
+    networks: [neura]
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    container_name: neura-api
+    environment:
+      SERVER_PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on: [seed-node-1]
+    networks: [neura]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/chain/stats"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/dashboard.Dockerfile
+    container_name: neura-dashboard
+    ports:
+      - "8088:80"
+    depends_on: [api]
+    networks: [neura]
+
+networks:
+  neura:
+    driver: bridge

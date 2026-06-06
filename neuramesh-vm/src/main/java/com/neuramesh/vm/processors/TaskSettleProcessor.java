@@ -4,10 +4,12 @@ import com.neuramesh.core.Transaction;
 import com.neuramesh.core.TxType;
 import com.neuramesh.vm.TransactionProcessor;
 import com.neuramesh.vm.exception.VMException;
+import com.neuramesh.vm.group.ResourceGroup;
 import com.neuramesh.vm.payload.TaskSettlePayload;
 import com.neuramesh.vm.state.AccountState;
 import com.neuramesh.vm.state.GlobalState;
 import com.neuramesh.vm.state.NodeState;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -22,6 +24,10 @@ public final class TaskSettleProcessor implements TransactionProcessor {
     public void process(Transaction tx, GlobalState state) {
         TaskSettlePayload p = TaskSettlePayload.decode(tx.getPayload());
         List<TaskSettlePayload.Allocation> allocs = p.allocations();
+        // P5：未给出显式分配但指定了资源组时，按组内节点权重自动解析分配
+        if (allocs.isEmpty() && !p.resourceGroupId().isBlank()) {
+            allocs = resolveFromGroup(state, p.resourceGroupId());
+        }
         if (allocs.isEmpty()) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "任务结算无分配目标");
         }
@@ -54,6 +60,30 @@ public final class TaskSettleProcessor implements TransactionProcessor {
         if (remainder > 0) {
             creditNode(state, allocs.get(maxIdx).nodeId(), remainder);
         }
+    }
+
+    /**
+     * 从资源组内解析按权重的分配列表：组内每个已注册、权重 &gt; 0 的节点参与，权重取 {@code round(totalWeight)}（下限 1）。
+     *
+     * @param state   全局状态
+     * @param groupId 资源组 id
+     * @return 分配列表（可能为空：组不存在或组内无合格节点）
+     */
+    private List<TaskSettlePayload.Allocation> resolveFromGroup(GlobalState state, String groupId) {
+        ResourceGroup group = state.resourceGroups().getGroup(groupId);
+        if (group == null) {
+            throw new VMException(VMException.Kind.INVALID_PAYLOAD, "资源组不存在: " + groupId);
+        }
+        List<TaskSettlePayload.Allocation> out = new ArrayList<>();
+        for (String nodeHex : group.sortedNodeIds()) {
+            byte[] nodeId = com.neuramesh.core.CryptoUtils.fromHex(nodeHex);
+            NodeState ns = state.getNode(nodeId);
+            if (ns != null && ns.getTotalWeight() > 0) {
+                long w = Math.max(1L, Math.round(ns.getTotalWeight()));
+                out.add(new TaskSettlePayload.Allocation(nodeId, w));
+            }
+        }
+        return out;
     }
 
     private void creditNode(GlobalState state, byte[] nodeId, long amount) {

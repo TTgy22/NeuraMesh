@@ -1,8 +1,19 @@
+// 种子节点可运行分发（Docker / 演示用）：application 插件生成启动脚本 + lib 分发
+apply plugin: 'application'
+
+application {
+    mainClass = 'com.neuramesh.network.SeedNode'
+    applicationName = 'neura-seed'
+}
+
 dependencies {
     // 网络层依赖 core / storage / consensus
     api project(':neuramesh-core')
     api project(':neuramesh-storage')
     api project(':neuramesh-consensus')
+
+    // 种子节点运行期日志实现（仅运行时，不污染编译期）
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.18'
 
     // Netty 4.1.x（异步 NIO）
     implementation 'io.netty:netty-handler:4.1.121.Final'

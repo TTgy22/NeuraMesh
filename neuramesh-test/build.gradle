@@ -1,6 +1,8 @@
 plugins {
     // 跨模块聚合覆盖率报告（tests 集中在本模块，需聚合 core/storage/consensus/network 的覆盖率）
     id 'jacoco-report-aggregation'
+    // JMH 压力测试（P5）：源集 src/jmh/java，包名 com.neuramesh.jmh（避免与 neuramesh-benchmark 模块包冲突）
+    id 'me.champeau.jmh' version '0.7.2'
 }
 
 dependencies {
@@ -21,6 +23,25 @@ dependencies {
 
     // 测试运行期日志实现
     testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.18'
+
+    // JMH 基准源集依赖：被压测的业务模块
+    jmhImplementation project(':neuramesh-core')
+    jmhImplementation project(':neuramesh-consensus')
+    jmhImplementation project(':neuramesh-network')
+    jmhImplementation project(':neuramesh-vm')
+}
+
+// JMH 配置：结果以 JSON 输出到 build/reports/jmh/
+jmh {
+    jmhVersion = '1.37'
+    fork = 1
+    warmupIterations = 2
+    iterations = 3
+    timeOnIteration = '1s'
+    warmup = '1s'
+    resultFormat = 'JSON'
+    resultsFile = layout.buildDirectory.file('reports/jmh/results.json').get().asFile
+    humanOutputFile = layout.buildDirectory.file('reports/jmh/human.txt').get().asFile
 }
 
 // 运行 test 后自动生成聚合覆盖率报告

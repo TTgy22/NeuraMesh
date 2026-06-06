@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type NodeStatus } from "../api";
+import { NetworkKPIs } from "../components/KPICard";
+import { ActivityStream } from "../components/ActivityStream";
 
 const DEMO_MODELS = ["Jetson-Orin-NX", "RTX-4090", "Mac-Studio-M2", "Jetson-Nano",
   "RTX-3060", "Ryzen-7950X", "M3-Max", "A100-40G"];
@@ -35,6 +37,11 @@ export function HardwareWall() {
           {seeding ? "注册中…" : "接入 8 台演示设备"}
         </button>
       </div>
+
+      <div style={{ margin: "var(--space-4) 0" }}>
+        <NetworkKPIs />
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
         {nodes.map((n) => (
           <div key={n.nodeId} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "var(--space-4)" }}>
@@ -53,6 +60,10 @@ export function HardwareWall() {
           </div>
         ))}
         {nodes.length === 0 && <p style={{ color: "var(--muted)" }}>点击右上角按钮接入演示设备（需后端 :8080 运行）。</p>}
+      </div>
+
+      <div style={{ marginTop: "var(--space-5)" }}>
+        <ActivityStream />
       </div>
     </div>
   );

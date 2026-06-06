@@ -230,4 +230,30 @@ public final class CryptoUtils {
         }
         return new String(out);
     }
+
+    /**
+     * 十六进制字符串转字节数组（{@link #toHex(byte[])} 的逆操作）。
+     *
+     * @param hex 十六进制字符串（可带 0x 前缀，长度需为偶数）
+     * @return 字节数组
+     */
+    public static byte[] fromHex(String hex) {
+        if (hex == null) {
+            throw new NeuraException("fromHex 输入不可为 null");
+        }
+        String s = hex.startsWith("0x") || hex.startsWith("0X") ? hex.substring(2) : hex;
+        if ((s.length() & 1) != 0) {
+            throw new NeuraException("fromHex 长度需为偶数: " + s.length());
+        }
+        byte[] out = new byte[s.length() / 2];
+        for (int i = 0; i < out.length; i++) {
+            int hi = Character.digit(s.charAt(i * 2), 16);
+            int lo = Character.digit(s.charAt(i * 2 + 1), 16);
+            if (hi < 0 || lo < 0) {
+                throw new NeuraException("fromHex 非法字符: " + s);
+            }
+            out[i] = (byte) ((hi << 4) | lo);
+        }
+        return out;
+    }
 }

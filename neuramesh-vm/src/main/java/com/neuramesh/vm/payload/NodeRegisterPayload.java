@@ -8,18 +8,25 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 /**
- * NODE_REGISTER 负载：设备指纹 + 初始硬件分数。
+ * NODE_REGISTER 负载：设备指纹 + 初始硬件分数 + 可选资源组 id（P5）。
  *
- * @param fingerprint   设备指纹（SHA-256，32 字节）
- * @param hardwareScore 初始硬件分数（来自 DeviceBenchmark）
+ * @param fingerprint     设备指纹（SHA-256，32 字节）
+ * @param hardwareScore   初始硬件分数（来自 DeviceBenchmark）
+ * @param resourceGroupId 可选资源组 id（空串表示"未分组"）
  */
-public record NodeRegisterPayload(byte[] fingerprint, double hardwareScore) {
+public record NodeRegisterPayload(byte[] fingerprint, double hardwareScore, String resourceGroupId) {
 
     public NodeRegisterPayload {
         if (fingerprint == null || fingerprint.length == 0) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "设备指纹不可为空");
         }
         fingerprint = fingerprint.clone();
+        resourceGroupId = resourceGroupId == null ? "" : resourceGroupId;
+    }
+
+    /** 向后兼容构造器（P3）：默认未分组。 */
+    public NodeRegisterPayload(byte[] fingerprint, double hardwareScore) {
+        this(fingerprint, hardwareScore, "");
     }
 
     @Override
@@ -33,6 +40,7 @@ public record NodeRegisterPayload(byte[] fingerprint, double hardwareScore) {
             out.writeInt(fingerprint.length);
             out.write(fingerprint);
             out.writeDouble(hardwareScore);
+            out.writeUTF(resourceGroupId);
             out.flush();
             return bos.toByteArray();
         } catch (IOException e) {
@@ -52,7 +60,8 @@ public record NodeRegisterPayload(byte[] fingerprint, double hardwareScore) {
             byte[] fp = new byte[len];
             in.readFully(fp);
             double hw = in.readDouble();
-            return new NodeRegisterPayload(fp, hw);
+            String groupId = in.available() > 0 ? in.readUTF() : "";
+            return new NodeRegisterPayload(fp, hw, groupId);
         } catch (IOException e) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "NODE_REGISTER 解码失败", e);
         }

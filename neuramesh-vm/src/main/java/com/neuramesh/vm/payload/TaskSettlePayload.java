@@ -12,11 +12,15 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * TASK_SETTLE 负载：任务 ID、总费用、按节点的权重分配列表。
+ * TASK_SETTLE 负载：任务 ID、总费用、按节点的权重分配列表，以及可选的资源组 id（P5）。
  *
  * <p>分配按各节点 weight 占比进行；整数除法的余数补给权重最大的节点，保证总额精确守恒。
+ *
+ * <p>资源组（P5）：当 {@code allocations} 为空且 {@code resourceGroupId} 非空时，处理器会在组内
+ * 按节点权重自动解析分配；否则沿用 P3 的显式分配列表。{@code resourceGroupId} 为空串表示不绑定组。
  */
-public record TaskSettlePayload(byte[] taskId, long totalFee, List<Allocation> allocations) {
+public record TaskSettlePayload(byte[] taskId, long totalFee, List<Allocation> allocations,
+                                String resourceGroupId) {
 
     /**
      * 单节点分配权重。
@@ -51,6 +55,12 @@ public record TaskSettlePayload(byte[] taskId, long totalFee, List<Allocation> a
         }
         taskId = taskId.clone();
         allocations = List.copyOf(allocations);
+        resourceGroupId = resourceGroupId == null ? "" : resourceGroupId;
+    }
+
+    /** 向后兼容构造器（P3）：不绑定资源组。 */
+    public TaskSettlePayload(byte[] taskId, long totalFee, List<Allocation> allocations) {
+        this(taskId, totalFee, allocations, "");
     }
 
     @Override
@@ -74,6 +84,7 @@ public record TaskSettlePayload(byte[] taskId, long totalFee, List<Allocation> a
                 out.write(a.nodeId());
                 out.writeLong(a.weight());
             }
+            out.writeUTF(resourceGroupId);
             out.flush();
             return bos.toByteArray();
         } catch (IOException e) {
@@ -104,7 +115,8 @@ public record TaskSettlePayload(byte[] taskId, long totalFee, List<Allocation> a
                 long w = in.readLong();
                 allocs.add(new Allocation(nid, w));
             }
-            return new TaskSettlePayload(taskId, fee, allocs);
+            String groupId = in.available() > 0 ? in.readUTF() : "";
+            return new TaskSettlePayload(taskId, fee, allocs, groupId);
         } catch (IOException e) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "TASK_SETTLE 解码失败", e);
         }

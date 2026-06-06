@@ -27,6 +27,11 @@ export interface ChainStats {
   blockHeight: number; txCount: number; nodeCount: number; accountCount: number;
   totalWeight: number; totalEarned: number; totalBalance: number;
 }
+export interface LevelDistribution { level: string; count: number; }
+export interface ResourceGroup {
+  groupId: string; region: string; minBenchmarkScore: number; requiredHttp2: boolean;
+  nodeCount: number; totalWeight: number; averageLatency: number; onlineRate: number;
+}
 
 export const api = {
   blocks: (limit = 20) => call<BlockInfo[]>(`/chain/blocks?limit=${limit}`),
@@ -40,4 +45,12 @@ export const api = {
   registerNode: (deviceModel: string) =>
     call<NodeStatus>(`/node/register`, { method: "POST", body: JSON.stringify({ deviceModel }) }),
   nodeStatus: (id: string) => call<NodeStatus>(`/node/${id}/status`),
+  nodesByLevel: () => call<LevelDistribution[]>(`/chain/nodes?groupBy=level`),
+  nodesByWeight: () => call<NodeStatus[]>(`/chain/nodes?sortBy=weight`),
+  groups: () => call<ResourceGroup[]>(`/groups`),
+  groupNodes: (id: string) => call<NodeStatus[]>(`/groups/${id}/nodes`),
+  joinGroup: (id: string, nodeId: string) =>
+    call<ResourceGroup>(`/groups/${id}/join`, { method: "POST", body: JSON.stringify({ nodeId }) }),
+  allocateGroupTask: (id: string, vendorId: string, taskType: string, budget: number) =>
+    call<TaskStatus>(`/groups/${id}/allocate`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget }) }),
 };

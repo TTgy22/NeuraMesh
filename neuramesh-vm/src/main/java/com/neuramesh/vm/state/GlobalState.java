@@ -29,6 +29,7 @@ public final class GlobalState {
     private final ConcurrentMap<String, AccountState> accounts = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, NodeState> nodes = new ConcurrentHashMap<>();
     private final java.util.Set<String> fingerprints = ConcurrentHashMap.newKeySet();
+    private final ResourceGroupState resourceGroups = new ResourceGroupState();
 
     /**
      * 获取账户，不存在则创建（余额 0，nonce 0）。
@@ -76,6 +77,15 @@ public final class GlobalState {
 
     public void putNode(NodeState node) {
         nodes.put(node.getNodeIdHex(), node);
+    }
+
+    /**
+     * 资源组子状态（P5）。
+     *
+     * @return 资源组状态
+     */
+    public ResourceGroupState resourceGroups() {
+        return resourceGroups;
     }
 
     public boolean isFingerprintRegistered(byte[] fingerprint) {
@@ -130,6 +140,7 @@ public final class GlobalState {
                     ByteUtils.longToBytes(Double.doubleToLongBits(n.getTotalWeight())),
                     ByteUtils.longToBytes(n.getTotalEarned())));
         }
+        leaves.addAll(resourceGroups.commitLeaves());
         return new MerkleTree(leaves).getRoot();
     }
 
@@ -147,6 +158,7 @@ public final class GlobalState {
             s.nodes.put(e.getKey(), e.getValue().copy());
         }
         s.fingerprints.addAll(fingerprints);
+        s.resourceGroups.restoreFrom(resourceGroups);
         return s;
     }
 
@@ -166,5 +178,6 @@ public final class GlobalState {
             nodes.put(e.getKey(), e.getValue().copy());
         }
         fingerprints.addAll(snapshot.fingerprints);
+        resourceGroups.restoreFrom(snapshot.resourceGroups);
     }
 }

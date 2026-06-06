@@ -6,9 +6,11 @@ import { VendorConsole } from "./pages/VendorConsole";
 import { TaskMonitor } from "./pages/TaskMonitor";
 import { BlockExplorer } from "./pages/BlockExplorer";
 import { HardwareWall } from "./pages/HardwareWall";
+import { NetworkMonitor } from "./pages/NetworkMonitor";
 
 const NAV = [
   { to: "/overview", label: "网络总览" },
+  { to: "/network", label: "网络监控" },
   { to: "/vendor", label: "厂商控制台" },
   { to: "/monitor", label: "任务看板" },
   { to: "/explorer", label: "区块浏览器" },
@@ -45,6 +47,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/overview" element={<Overview />} />
+            <Route path="/network" element={<NetworkMonitor />} />
             <Route path="/vendor" element={<VendorConsole />} />
             <Route path="/monitor" element={<TaskMonitor />} />
             <Route path="/explorer" element={<BlockExplorer />} />
