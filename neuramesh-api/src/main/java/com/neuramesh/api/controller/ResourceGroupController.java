@@ -2,23 +2,25 @@ package com.neuramesh.api.controller;
 
 import com.neuramesh.api.common.ApiResponse;
 import com.neuramesh.api.dto.NodeStatusDTO;
+import com.neuramesh.api.dto.PurchaseReceiptDTO;
+import com.neuramesh.api.dto.PurchaseRequest;
 import com.neuramesh.api.dto.ResourceGroupDTO;
 import com.neuramesh.api.dto.TaskStatusDTO;
+import com.neuramesh.api.security.UserPrincipal;
 import com.neuramesh.api.service.ResourceGroupService;
 import java.util.List;
 import java.util.Map;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 资源组 REST API：列出/详情/加入/组内节点/按组分配任务。
+ * 资源组 REST API：组管理（/groups）+ 市场购买（/market）+ 我的资源组（/vendor/groups）。
  */
 @RestController
-@RequestMapping("/groups")
 public class ResourceGroupController {
 
     private final ResourceGroupService groupService;
@@ -27,12 +29,14 @@ public class ResourceGroupController {
         this.groupService = groupService;
     }
 
-    @GetMapping
+    // ---- 组管理（公开，既有 dashboard 使用）----
+
+    @GetMapping("/groups")
     public ApiResponse<List<ResourceGroupDTO>> list() {
         return ApiResponse.ok(groupService.list());
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/groups/{id}")
     public ApiResponse<ResourceGroupDTO> detail(@PathVariable("id") String id) {
         ResourceGroupDTO dto = groupService.detail(id);
         if (dto == null) {
@@ -41,7 +45,7 @@ public class ResourceGroupController {
         return ApiResponse.ok(dto);
     }
 
-    @GetMapping("/{id}/nodes")
+    @GetMapping("/groups/{id}/nodes")
     public ApiResponse<List<NodeStatusDTO>> nodes(@PathVariable("id") String id) {
         List<NodeStatusDTO> nodes = groupService.nodesOf(id);
         if (nodes == null) {
@@ -50,7 +54,7 @@ public class ResourceGroupController {
         return ApiResponse.ok(nodes);
     }
 
-    @PostMapping("/{id}/join")
+    @PostMapping("/groups/{id}/join")
     public ApiResponse<ResourceGroupDTO> join(@PathVariable("id") String id,
                                               @RequestBody Map<String, String> body) {
         String nodeId = body == null ? null : body.get("nodeId");
@@ -64,7 +68,7 @@ public class ResourceGroupController {
         }
     }
 
-    @PostMapping("/{id}/allocate")
+    @PostMapping("/groups/{id}/allocate")
     public ApiResponse<TaskStatusDTO> allocate(@PathVariable("id") String id,
                                                @RequestBody(required = false) Map<String, Object> body) {
         String vendorId = body == null ? null : asString(body.get("vendorId"));
@@ -74,6 +78,61 @@ public class ResourceGroupController {
             budget = n.longValue();
         }
         return ApiResponse.ok(groupService.allocateTask(id, vendorId, taskType, budget));
+    }
+
+    // ---- 市场（浏览公开，购买/续费需认证）----
+
+    @GetMapping("/market/groups")
+    public ApiResponse<List<ResourceGroupDTO>> market() {
+        return ApiResponse.ok(groupService.list());
+    }
+
+    @GetMapping("/market/groups/{id}")
+    public ApiResponse<ResourceGroupDTO> marketDetail(@PathVariable("id") String id) {
+        ResourceGroupDTO dto = groupService.detail(id);
+        if (dto == null) {
+            return ApiResponse.error(404, "资源组不存在: " + id);
+        }
+        return ApiResponse.ok(dto);
+    }
+
+    @PostMapping("/market/groups/{id}/buy")
+    public ApiResponse<PurchaseReceiptDTO> buy(@PathVariable("id") String id,
+                                               @RequestBody PurchaseRequest req,
+                                               @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            return ApiResponse.error(401, "未认证");
+        }
+        try {
+            return ApiResponse.ok(groupService.buy(id, principal, req == null ? 0 : req.hours()));
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(400, e.getMessage());
+        }
+    }
+
+    @PostMapping("/market/groups/{id}/renew")
+    public ApiResponse<PurchaseReceiptDTO> renew(@PathVariable("id") String id,
+                                                 @RequestBody PurchaseRequest req,
+                                                 @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            return ApiResponse.error(401, "未认证");
+        }
+        try {
+            return ApiResponse.ok(groupService.renew(id, principal, req == null ? 0 : req.hours()));
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(400, e.getMessage());
+        }
+    }
+
+    // ---- 我的资源组（需认证）----
+
+    @GetMapping("/vendor/groups")
+    public ApiResponse<List<Map<String, Object>>> myGroups(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            return ApiResponse.error(401, "未认证");
+        }
+        return ApiResponse.ok(groupService.myGroups(principal.userId()));
     }
 
     private static String asString(Object o) {

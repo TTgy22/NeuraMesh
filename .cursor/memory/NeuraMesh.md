@@ -157,7 +157,18 @@ txId = SHA-256(typeOrdinal||from||to||nonce||payloadLen||payload||timestamp)，�
 - **Step 5 JMH（完成）**：`neuramesh-test` 应用 `me.champeau.jmh` 0.7.2，JMH 1.37，源集 src/jmh/java/com/neuramesh/jmh，结果 JSON+human 输出 build/reports/jmh/。**实测 JDK17：StateMachine 8013 tx/s；共识单轮(8 验证者全 PBFT+真实 ECDSA) 1.697 ms；共识 590 轮/s；Gossip 扇出 177k/s；单跳解码 0.667µs**。全部达标（TPS≥1000、最终化≤1.5s）。
 - **Step 6 Docker（完成，未本机验证—Docker 未装）**：`neuramesh-network` 应用 `application` 插件 + 新增 `SeedNode`(main，env NEURA_PORT/NEURA_PEERS/NEURA_NODE_HEIGHT，连 bootstrap 重试)；`docker/` 下 docker-compose.yml(4 种子+api+dashboard)、seed-node.Dockerfile(installDist→neura-seed)、api.Dockerfile(bootJar)、dashboard.Dockerfile(npm build→nginx)、nginx.conf(/api 反代 api:8080)、init.sh、README.md。`installDist`+`bootJar` 本机构建通过。
 - **测试与覆盖率**：clean test 114 测试 0 失败 0 错误（106 P4 + 8 ResourceGroupTest）；聚合 LINE 78.5%（vm.group 84.6/state 83.5/processors 85.8/payload 81.5）≥70%。
-- **提交信息预备**：`[P5] feat: Demo集成 + 资源组架构 + 可视化增强 + JMH压测`。
+- **提交信息预备（上半，已提交 dbfa7c8）**：`[P5] feat: Demo集成 + 资源组架构 + 可视化增强 + JMH压测`。
+
+### Pause 5 下半（用户系统 + 安全组 + 购买界面，本地完成待提交）
+- **环境**：Spring Boot 3.2.10 → Spring Security 6.2.x；JWT 用 `io.jsonwebtoken jjwt 0.12.6`（HS256）。bootRun 测试前需停（Windows 文件锁）。
+- **vm 扩展**：新增 `state/UserState`（userId/username/passwordHash/role/publicKey/encryptedPrivKey/address，不可变，余额取链上）。`GlobalState` +`users: Map`，纳入 commit() "U:" 叶子 + snapshot/restore。`ResourceGroup` +groupPublicKey/encryptedGroupPrivKey/pricePerHour（保留 4 参构造器）。`GroupMembership` +membershipCertificate（保留 4 参构造器）。`ResourceGroupState.addNodeToGroup` 加 5 参重载（带 cert）。commitLeaves 的 G:/M: 叶子已含新字段。
+- **api 安全**：`build.gradle` +spring-boot-starter-security +jjwt(api/impl/jackson) +spring-security-test。`security/`：`JwtUtil`(HS256，access 15m/refresh 7d，密钥读 `neuramesh.jwt.secret` 默认值)、`JwtFilter`(OncePerRequest，Bearer→UserPrincipal→SecurityContext，ROLE_前缀)、`UserPrincipal`(record userId/username/role/address)、`CryptoBox`(AES-256-GCM + PBKDF2，加密私钥)。`config/SecurityConfig`(无状态，permitAll 除 /user/** 、/vendor/groups/** 、POST /market/groups/*/buy|renew 需认证；OPTIONS 全放行；CORS 用 CorsConfigurationSource)。**删除旧 CorsConfig（WebMvc）避免重复 CORS 头**。
+- **api 认证/用户**：`AuthService`(register: BCrypt(强度10)+ECDSA keypair+CryptoBox 加密私钥+VENDOR 初始注资 5,000,000；login/refresh)、`UserService`(profile/balance 取链上)、`AuthController`(/auth/register|login|refresh)、`UserController`(/user/me|balance 需认证)。DTO: LoginRequest/RegisterRequest/TokenResponse/PurchaseRequest/PurchaseReceiptDTO。
+- **api 市场/购买**：`ResourceGroupService` seed 给 3 组生成安全组密钥对+价格(qingdao 20k/shanghai 50k/shenzhen 35k/h)，join 签发成员凭证；新增 buy（校验余额→TOKEN_TRANSFER 到金库 treasuryKey→发放明文 groupPrivateKey+记录购买）、renew、myGroups。`ResourceGroupController` 去掉类级 @RequestMapping，方法用绝对路径，新增 /market/groups、/market/groups/{id}、POST /market/groups/{id}/buy|renew、GET /vendor/groups。`ResourceGroupDTO` +pricePerHour+groupPublicKey。
+- **关键**：StateMachine.apply 不验签（仅 nonce），故购买扣款构造无签名 TOKEN_TRANSFER 即可由状态机扣款守恒。groupPrivateKey 明文交付（TODO P6 加密）。
+- **dashboard**：`api.ts` +auth(localStorage token/Authorization 头)+register/login/me/myBalance/market/buyGroup/renewGroup/myGroups。新增页 `LoginPage`(登录/注册)、`MarketPage`(卡片网格+排序)、`BuyModal`(时长/费用/余额/凭证)、`MyGroupsPage`(已购+续费)。`App.tsx` +登录态/退出/侧栏用户信息+路由(/market /vendor-groups /login)。`npm run build` 通过。
+- **测试**：新增 `AuthPurchaseTest`(4 用例：注册登录余额购买全流程/重复用户名/错密码/余额不足)。clean test **118 测试 0 失败**（106 P4 +8 资源组 +4 auth）。聚合 LINE 77.1%（vm.state 70.1/group 81.5）≥70%。
+- **提交信息预备（下半）**：`[P5] feat: 用户系统 + 安全组公钥私钥 + 厂商购买界面`。
 - **CRLF 噪声**：TxPool/VoteCollectorTest/GossipProtocol/StateMachineTest 4 文件为行尾噪声，提交时勿纳入。
 
 ## 十四、下一步（Pause 5 入口条件）

@@ -30,9 +30,29 @@ public final class ResourceGroup {
     private final String region;
     private final double minBenchmarkScore;
     private final boolean requiredHttp2;
+    private final String groupPublicKey;
+    private final String encryptedGroupPrivKey;
+    private final long pricePerHour;
     private final Set<String> nodeIds = new LinkedHashSet<>();
 
+    /** 向后兼容构造器（P5 上半）：无安全组密钥、价格 0。 */
     public ResourceGroup(String groupId, String region, double minBenchmarkScore, boolean requiredHttp2) {
+        this(groupId, region, minBenchmarkScore, requiredHttp2, "", "", 0L);
+    }
+
+    /**
+     * 完整构造器（P5 下半）：含安全组密钥对与按小时定价。
+     *
+     * @param groupId               资源组 id
+     * @param region                地区名
+     * @param minBenchmarkScore     软性加入门槛
+     * @param requiredHttp2         是否要求 HTTP/2.0
+     * @param groupPublicKey        安全组公钥（hex，公开）
+     * @param encryptedGroupPrivKey 加密后的安全组私钥（购买后解密交付）
+     * @param pricePerHour          每小时价格（NMT 最小单位）
+     */
+    public ResourceGroup(String groupId, String region, double minBenchmarkScore, boolean requiredHttp2,
+                         String groupPublicKey, String encryptedGroupPrivKey, long pricePerHour) {
         if (groupId == null || groupId.isBlank()) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "groupId 不可为空");
         }
@@ -42,15 +62,22 @@ public final class ResourceGroup {
         if (minBenchmarkScore < 0) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "minBenchmarkScore 不可为负");
         }
+        if (pricePerHour < 0) {
+            throw new VMException(VMException.Kind.INVALID_PAYLOAD, "pricePerHour 不可为负");
+        }
         this.groupId = groupId;
         this.region = region;
         this.minBenchmarkScore = minBenchmarkScore;
         this.requiredHttp2 = requiredHttp2;
+        this.groupPublicKey = groupPublicKey == null ? "" : groupPublicKey;
+        this.encryptedGroupPrivKey = encryptedGroupPrivKey == null ? "" : encryptedGroupPrivKey;
+        this.pricePerHour = pricePerHour;
     }
 
     /** 深拷贝（快照用）。 */
     public ResourceGroup copy() {
-        ResourceGroup c = new ResourceGroup(groupId, region, minBenchmarkScore, requiredHttp2);
+        ResourceGroup c = new ResourceGroup(groupId, region, minBenchmarkScore, requiredHttp2,
+                groupPublicKey, encryptedGroupPrivKey, pricePerHour);
         c.nodeIds.addAll(nodeIds);
         return c;
     }
@@ -97,5 +124,17 @@ public final class ResourceGroup {
 
     public boolean requiredHttp2() {
         return requiredHttp2;
+    }
+
+    public String groupPublicKey() {
+        return groupPublicKey;
+    }
+
+    public String encryptedGroupPrivKey() {
+        return encryptedGroupPrivKey;
+    }
+
+    public long pricePerHour() {
+        return pricePerHour;
     }
 }

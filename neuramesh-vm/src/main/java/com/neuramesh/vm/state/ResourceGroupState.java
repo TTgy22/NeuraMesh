@@ -79,6 +79,20 @@ public final class ResourceGroupState {
      * @param verified  软性验证是否通过
      */
     public void addNodeToGroup(String nodeIdHex, String groupId, long joinedAt, boolean verified) {
+        addNodeToGroup(nodeIdHex, groupId, joinedAt, verified, "");
+    }
+
+    /**
+     * 将节点加入资源组（带成员凭证）：若节点已属其他组则先迁出。
+     *
+     * @param nodeIdHex             节点地址 hex
+     * @param groupId               目标组 id
+     * @param joinedAt              加入时间戳
+     * @param verified              软性验证是否通过
+     * @param membershipCertificate 平台成员凭证（hex，可空）
+     */
+    public void addNodeToGroup(String nodeIdHex, String groupId, long joinedAt, boolean verified,
+                               String membershipCertificate) {
         ResourceGroup target = groups.get(groupId);
         if (target == null) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "资源组不存在: " + groupId);
@@ -91,7 +105,8 @@ public final class ResourceGroupState {
             }
         }
         target.addNode(nodeIdHex);
-        memberships.put(nodeIdHex, new GroupMembership(nodeIdHex, groupId, joinedAt, verified));
+        memberships.put(nodeIdHex,
+                new GroupMembership(nodeIdHex, groupId, joinedAt, verified, membershipCertificate));
     }
 
     /**
@@ -128,8 +143,10 @@ public final class ResourceGroupState {
             ResourceGroup g = e.getValue();
             String members = String.join(",", g.sortedNodeIds());
             leaves.add(ByteUtils.concat(
-                    ("G:" + g.groupId() + "|" + g.region()).getBytes(StandardCharsets.UTF_8),
+                    ("G:" + g.groupId() + "|" + g.region() + "|" + g.groupPublicKey())
+                            .getBytes(StandardCharsets.UTF_8),
                     ByteUtils.longToBytes(Double.doubleToLongBits(g.minBenchmarkScore())),
+                    ByteUtils.longToBytes(g.pricePerHour()),
                     new byte[] {(byte) (g.requiredHttp2() ? 1 : 0)},
                     members.getBytes(StandardCharsets.UTF_8)));
         }
@@ -137,7 +154,8 @@ public final class ResourceGroupState {
         for (Map.Entry<String, GroupMembership> e : sortedMembers.entrySet()) {
             GroupMembership m = e.getValue();
             leaves.add(ByteUtils.concat(
-                    ("M:" + m.nodeIdHex() + "|" + m.groupId()).getBytes(StandardCharsets.UTF_8),
+                    ("M:" + m.nodeIdHex() + "|" + m.groupId() + "|" + m.membershipCertificate())
+                            .getBytes(StandardCharsets.UTF_8),
                     ByteUtils.longToBytes(m.joinedAt()),
                     new byte[] {(byte) (m.verified() ? 1 : 0)}));
         }

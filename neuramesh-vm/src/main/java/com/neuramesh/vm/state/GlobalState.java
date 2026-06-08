@@ -30,6 +30,7 @@ public final class GlobalState {
     private final ConcurrentMap<String, NodeState> nodes = new ConcurrentHashMap<>();
     private final java.util.Set<String> fingerprints = ConcurrentHashMap.newKeySet();
     private final ResourceGroupState resourceGroups = new ResourceGroupState();
+    private final ConcurrentMap<String, UserState> users = new ConcurrentHashMap<>();
 
     /**
      * 获取账户，不存在则创建（余额 0，nonce 0）。
@@ -88,6 +89,42 @@ public final class GlobalState {
         return resourceGroups;
     }
 
+    /**
+     * 注册/更新用户（按 userId 覆盖）。
+     *
+     * @param user 用户状态
+     */
+    public void putUser(UserState user) {
+        users.put(user.getUserId(), user);
+    }
+
+    public UserState getUser(String userId) {
+        return users.get(userId);
+    }
+
+    /**
+     * 按用户名查找（不存在返回 null）。
+     *
+     * @param username 用户名
+     * @return 用户或 null
+     */
+    public UserState getUserByName(String username) {
+        for (UserState u : users.values()) {
+            if (u.getUsername().equals(username)) {
+                return u;
+            }
+        }
+        return null;
+    }
+
+    public java.util.Collection<UserState> allUsers() {
+        return java.util.Collections.unmodifiableCollection(new java.util.ArrayList<>(users.values()));
+    }
+
+    public int userCount() {
+        return users.size();
+    }
+
     public boolean isFingerprintRegistered(byte[] fingerprint) {
         return fingerprints.contains(CryptoUtils.toHex(fingerprint));
     }
@@ -141,6 +178,15 @@ public final class GlobalState {
                     ByteUtils.longToBytes(n.getTotalEarned())));
         }
         leaves.addAll(resourceGroups.commitLeaves());
+        Map<String, UserState> sortedUsers = new TreeMap<>(users);
+        for (Map.Entry<String, UserState> e : sortedUsers.entrySet()) {
+            UserState u = e.getValue();
+            leaves.add(ByteUtils.concat(
+                    ("U:" + e.getKey() + "|" + u.getUsername() + "|" + u.getRole()
+                            + "|" + u.getPublicKey() + "|" + u.getAddress())
+                            .getBytes(StandardCharsets.UTF_8),
+                    u.getPasswordHash().getBytes(StandardCharsets.UTF_8)));
+        }
         return new MerkleTree(leaves).getRoot();
     }
 
@@ -159,6 +205,9 @@ public final class GlobalState {
         }
         s.fingerprints.addAll(fingerprints);
         s.resourceGroups.restoreFrom(resourceGroups);
+        for (Map.Entry<String, UserState> e : users.entrySet()) {
+            s.users.put(e.getKey(), e.getValue().copy());
+        }
         return s;
     }
 
@@ -179,5 +228,9 @@ public final class GlobalState {
         }
         fingerprints.addAll(snapshot.fingerprints);
         resourceGroups.restoreFrom(snapshot.resourceGroups);
+        users.clear();
+        for (Map.Entry<String, UserState> e : snapshot.users.entrySet()) {
+            users.put(e.getKey(), e.getValue().copy());
+        }
     }
 }
