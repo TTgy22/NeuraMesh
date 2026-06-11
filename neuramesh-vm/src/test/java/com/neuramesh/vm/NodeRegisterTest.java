@@ -9,6 +9,7 @@ import com.neuramesh.core.CryptoUtils;
 import com.neuramesh.core.TxType;
 import com.neuramesh.vm.exception.VMException;
 import com.neuramesh.vm.payload.NodeRegisterPayload;
+import com.neuramesh.vm.processors.NodeRegisterProcessor;
 import com.neuramesh.vm.state.GlobalState;
 import com.neuramesh.vm.state.NodeState;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +27,7 @@ class NodeRegisterTest {
     }
 
     @Test
-    @DisplayName("新指纹注册成功，NodeState 初始化且权重为 0")
+    @DisplayName("新指纹注册成功：初始权重 hw*0.3 立即生效，兜底加入 general-purpose 默认组")
     void register_new_node() {
         StateMachine sm = sm();
         GlobalState state = new GlobalState();
@@ -37,8 +38,13 @@ class NodeRegisterTest {
 
         NodeState ns = state.getNode(node);
         assertThat(ns).isNotNull();
-        assertThat(ns.getTotalWeight()).isZero();
+        // 注册即赋初始权重：hardwareScore=5000 → totalWeight = 5000*0.3 = 1500
+        assertThat(ns.getHardwareScore()).isEqualTo(5000.0);
+        assertThat(ns.getTotalWeight()).isEqualTo(1500.0);
         assertThat(state.isFingerprintRegistered(fingerprint(1))).isTrue();
+        // 未指定资源组 → 兜底加入默认组（自动创建）
+        assertThat(state.resourceGroups().membershipOf(CryptoUtils.toHex(node)).groupId())
+                .isEqualTo(NodeRegisterProcessor.DEFAULT_GROUP_ID);
     }
 
     @Test

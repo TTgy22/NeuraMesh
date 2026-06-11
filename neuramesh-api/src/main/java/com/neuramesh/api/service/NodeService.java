@@ -46,13 +46,25 @@ public class NodeService {
     }
 
     /**
-     * 注册新节点并赋予初始权重，返回节点状态。
+     * 注册新节点（未指定资源组：链上兜底加入 general-purpose 默认组）。
      *
      * @param deviceModel 设备型号
      * @return 节点状态
      */
     public NodeStatusDTO register(String deviceModel) {
+        return register(deviceModel, null);
+    }
+
+    /**
+     * 注册新节点并赋予初始权重，返回节点状态。
+     *
+     * @param deviceModel     设备型号
+     * @param resourceGroupId 目标资源组 id（null/空 → 链上兜底默认组 general-purpose）
+     * @return 节点状态
+     */
+    public NodeStatusDTO register(String deviceModel, String resourceGroupId) {
         String model = (deviceModel == null || deviceModel.isBlank()) ? "generic-edge" : deviceModel;
+        String groupId = resourceGroupId == null ? "" : resourceGroupId.trim();
         BenchmarkResult result = benchmark.run(model);
         byte[] salt = new byte[16];
         RND.nextBytes(salt);
@@ -64,11 +76,12 @@ public class NodeService {
         nodeKeys.put(nodeIdHex, kp);
         deviceModels.put(nodeIdHex, model);
 
-        // 1) NODE_REGISTER（初始权重 0）
-        NodeRegisterPayload regPayload = new NodeRegisterPayload(fp.getHash(), normalizedScore(result));
+        // 1) NODE_REGISTER（注册即得初始权重 hw*0.3，并加入资源组/兜底默认组）
+        NodeRegisterPayload regPayload =
+                new NodeRegisterPayload(fp.getHash(), normalizedScore(result), groupId);
         chain.applyTx(signTx(TxType.NODE_REGISTER, kp, nodeId, nodeId, 0, regPayload.encode()));
 
-        // 2) WEIGHT_UPDATE（≥2 验证者一致见证，赋予权重）
+        // 2) WEIGHT_UPDATE（≥2 验证者一致见证，覆盖为完整四项分数）
         double hardware = normalizedScore(result);
         double claimed = hardware;
         List<Attestation> atts = new ArrayList<>();
@@ -78,7 +91,8 @@ public class NodeService {
         chain.applyTx(signTx(TxType.WEIGHT_UPDATE, kp, nodeId, nodeId, 1, wu.encode()));
 
         online.put(nodeIdHex, true);
-        LOG.info("节点注册成功 {} model={}", nodeIdHex, model);
+        LOG.info("节点注册成功 {} model={} group={}", nodeIdHex, model,
+                groupId.isBlank() ? "general-purpose(兜底)" : groupId);
         return status(nodeIdHex);
     }
 
@@ -108,7 +122,7 @@ public class NodeService {
                 deviceModels.getOrDefault(hex, "unknown"),
                 ns.getHardwareScore(), ns.getQualityScore(), ns.getUptimeScore(),
                 ns.getBandwidthScore(), ns.getTotalWeight(), ns.getTotalEarned(),
-                level(ns.getTotalWeight()));
+                level(ns.getTotalWeight()), CryptoUtils.toHex(ns.getFingerprint()));
     }
 
     /**

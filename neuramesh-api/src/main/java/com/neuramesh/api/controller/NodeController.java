@@ -30,7 +30,8 @@ public class NodeController {
     @PostMapping("/register")
     public ApiResponse<NodeStatusDTO> register(@RequestBody(required = false) NodeRegisterRequest req) {
         String model = req == null ? null : req.deviceModel();
-        return ApiResponse.ok(nodeService.register(model));
+        String groupId = req == null ? null : req.resourceGroupId();
+        return ApiResponse.ok(nodeService.register(model, groupId));
     }
 
     @GetMapping("/list")

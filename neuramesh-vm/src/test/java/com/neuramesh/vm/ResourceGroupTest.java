@@ -150,6 +150,87 @@ class ResourceGroupTest {
     }
 
     @Test
+    @DisplayName("修复无合格节点①：未指定分组的注册兜底加入 general-purpose（自动创建）且初始权重 > 0")
+    void register_noGroup_fallsBackToDefaultGroup() {
+        StateMachine sm = sm();
+        GlobalState state = new GlobalState();
+
+        byte[] node = addr(7);
+        // 2 参构造器：未指定 resourceGroupId
+        sm.apply(tx(TxType.NODE_REGISTER, node, node, 0,
+                new NodeRegisterPayload(fp(7), 300).encode()), state);
+
+        // 默认组被确定性自动创建，节点已是成员
+        var defaultGroup = state.resourceGroups()
+                .getGroup(com.neuramesh.vm.processors.NodeRegisterProcessor.DEFAULT_GROUP_ID);
+        assertThat(defaultGroup).isNotNull();
+        assertThat(defaultGroup.containsNode(CryptoUtils.toHex(node))).isTrue();
+        // 初始权重 = 300*0.3 = 90 > 0，即时具备结算资格
+        assertThat(state.getNode(node).getTotalWeight()).isEqualTo(90.0);
+    }
+
+    @Test
+    @DisplayName("修复无合格节点②：裸注册后立即在默认组内结算成功（全流程守恒）")
+    void settle_defaultGroup_afterBareRegister() {
+        StateMachine sm = sm();
+        GlobalState state = new GlobalState();
+
+        byte[] node = addr(8);
+        sm.apply(tx(TxType.NODE_REGISTER, node, node, 0,
+                new NodeRegisterPayload(fp(8), 200).encode()), state);
+
+        byte[] vendor = addr(1);
+        state.credit(vendor, 500);
+        TaskSettlePayload p = new TaskSettlePayload("task-default".getBytes(), 500,
+                java.util.List.of(), com.neuramesh.vm.processors.NodeRegisterProcessor.DEFAULT_GROUP_ID);
+        sm.apply(tx(TxType.TASK_SETTLE, vendor, vendor, 0, p.encode()), state);
+
+        assertThat(state.getAccount(node).getBalance()).isEqualTo(500);
+        assertThat(state.getNode(node).getTotalEarned()).isEqualTo(500);
+        assertThat(state.getAccount(vendor).getBalance()).isZero();
+        assertThat(state.totalBalance()).isEqualTo(500);
+    }
+
+    @Test
+    @DisplayName("修复无合格节点③：组为空 → 精确报因'组为空'并回滚")
+    void settle_emptyGroup_preciseError() {
+        StateMachine sm = sm();
+        GlobalState state = new GlobalState();
+        state.resourceGroups().createGroup(group("g-empty", "空组", 0, false));
+        byte[] vendor = addr(1);
+        state.credit(vendor, 100);
+
+        TaskSettlePayload p = new TaskSettlePayload(
+                "t".getBytes(), 100, java.util.List.of(), "g-empty");
+        assertThatThrownBy(() -> sm.apply(tx(TxType.TASK_SETTLE, vendor, vendor, 0, p.encode()), state))
+                .isInstanceOf(VMException.class)
+                .hasMessageContaining("为空");
+        assertThat(state.getAccount(vendor).getBalance()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("修复无合格节点④：组内节点权重全为 0 → 精确报因'无有效权重'并回滚")
+    void settle_zeroWeightGroup_preciseError() {
+        StateMachine sm = sm();
+        GlobalState state = new GlobalState();
+        state.resourceGroups().createGroup(group("g-zero", "零权重组", 0, false));
+
+        // 直接放入一个未赋权重的节点（绕过注册路径，模拟权重为 0 的旧数据）
+        byte[] node = addr(9);
+        state.putNode(new NodeState(node, fp(9)));
+        state.resourceGroups().addNodeToGroup(CryptoUtils.toHex(node), "g-zero", 1L, true);
+
+        byte[] vendor = addr(1);
+        state.credit(vendor, 100);
+        TaskSettlePayload p = new TaskSettlePayload(
+                "t".getBytes(), 100, java.util.List.of(), "g-zero");
+        assertThatThrownBy(() -> sm.apply(tx(TxType.TASK_SETTLE, vendor, vendor, 0, p.encode()), state))
+                .isInstanceOf(VMException.class)
+                .hasMessageContaining("无有效权重");
+        assertThat(state.getAccount(vendor).getBalance()).isEqualTo(100);
+    }
+
+    @Test
     @DisplayName("TASK_SETTLE 指定不存在的资源组 → 失败回滚")
     void settle_unknownGroup_rollback() {
         StateMachine sm = sm();

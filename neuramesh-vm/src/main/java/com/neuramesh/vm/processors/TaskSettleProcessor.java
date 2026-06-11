@@ -65,23 +65,36 @@ public final class TaskSettleProcessor implements TransactionProcessor {
     /**
      * 从资源组内解析按权重的分配列表：组内每个已注册、权重 &gt; 0 的节点参与，权重取 {@code round(totalWeight)}（下限 1）。
      *
+     * <p>失败时精确报因（修复笼统的"无合格节点"）：组不存在 / 组为空 / 组内节点全部无有效权重，
+     * 三种情形抛出不同消息的 {@link VMException}，便于调用方与日志定位。
+     *
      * @param state   全局状态
      * @param groupId 资源组 id
-     * @return 分配列表（可能为空：组不存在或组内无合格节点）
+     * @return 非空分配列表
      */
     private List<TaskSettlePayload.Allocation> resolveFromGroup(GlobalState state, String groupId) {
         ResourceGroup group = state.resourceGroups().getGroup(groupId);
         if (group == null) {
             throw new VMException(VMException.Kind.INVALID_PAYLOAD, "资源组不存在: " + groupId);
         }
+        List<String> members = group.sortedNodeIds();
+        if (members.isEmpty()) {
+            throw new VMException(VMException.Kind.INVALID_PAYLOAD,
+                    "资源组 " + groupId + " 为空：无节点加入该组，无法分配任务");
+        }
         List<TaskSettlePayload.Allocation> out = new ArrayList<>();
-        for (String nodeHex : group.sortedNodeIds()) {
+        for (String nodeHex : members) {
             byte[] nodeId = com.neuramesh.core.CryptoUtils.fromHex(nodeHex);
             NodeState ns = state.getNode(nodeId);
             if (ns != null && ns.getTotalWeight() > 0) {
                 long w = Math.max(1L, Math.round(ns.getTotalWeight()));
                 out.add(new TaskSettlePayload.Allocation(nodeId, w));
             }
+        }
+        if (out.isEmpty()) {
+            throw new VMException(VMException.Kind.INVALID_PAYLOAD,
+                    "资源组 " + groupId + " 内 " + members.size()
+                            + " 个节点均无有效权重（未注册或权重为 0），无法分配任务");
         }
         return out;
     }

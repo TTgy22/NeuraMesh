@@ -1,16 +1,41 @@
-import { useState } from "react";
-import { api, type NodeStatus } from "../api";
+import { useEffect, useState } from "react";
+import { api, type NodeStatus, type ResourceGroup } from "../api";
+import { saveIdentity } from "../utils/fingerprintStorage";
 
-// 设备检测：脉冲扫描动画 + 预估日收益 + 生成设备指纹（经后端注册）
+// 设备检测：脉冲扫描动画 + 强制选择资源组 + 生成设备指纹（经后端注册，终身一次）
 export function DeviceScanner({ onRegistered }: { onRegistered: (n: NodeStatus) => void }) {
   const [scanning, setScanning] = useState(false);
   const [model, setModel] = useState("RTX-4090");
+  const [groups, setGroups] = useState<ResourceGroup[]>([]);
+  const [groupId, setGroupId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    api.groups()
+      .then((gs) => {
+        setGroups(gs);
+        // 必须归属一组：默认选中兜底组 general-purpose，不存在则取第一个
+        setGroupId((cur) => cur || (gs.find((g) => g.groupId === "general-purpose")?.groupId ?? gs[0]?.groupId ?? ""));
+      })
+      .catch(() => setError("无法加载资源组列表，请确认后端已启动"));
+  }, []);
+
   async function scan() {
+    if (!groupId) {
+      setError("请先选择资源组");
+      return;
+    }
     setScanning(true); setError(null);
     try {
-      const node = await api.register(model);
+      const node = await api.register(model, groupId);
+      // 指纹终身一次：注册成功立即持久化，重启 / 刷新后永久复用同一身份
+      await saveIdentity({
+        nodeId: node.nodeId,
+        fingerprint: node.fingerprint ?? "",
+        deviceModel: model,
+        resourceGroupId: groupId,
+        registeredAt: Date.now(),
+      });
       onRegistered(node);
     } catch (e) {
       setError((e as Error).message);
@@ -25,13 +50,30 @@ export function DeviceScanner({ onRegistered }: { onRegistered: (n: NodeStatus) 
       <div style={{ width: 64, height: 64, margin: "0 auto var(--space-3)", borderRadius: "50%",
         border: "2px solid var(--accent)", animation: scanning ? "pulse 1.2s ease-in-out infinite" : "none" }} />
       <input className="mono" value={model} onChange={(e) => setModel(e.target.value)}
-        style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)",
-                 borderRadius: 6, padding: "var(--space-2)", marginBottom: "var(--space-3)", textAlign: "center" }} />
-      <button onClick={scan} disabled={scanning}
+        style={{ display: "block", width: "100%", boxSizing: "border-box", background: "var(--bg)",
+                 color: "var(--text)", border: "1px solid var(--border)",
+                 borderRadius: 6, padding: "var(--space-2)", marginBottom: "var(--space-2)", textAlign: "center" }} />
+      <select className="mono" value={groupId} onChange={(e) => setGroupId(e.target.value)}
+        aria-label="选择资源组"
+        style={{ display: "block", width: "100%", boxSizing: "border-box", background: "var(--bg)",
+                 color: "var(--text)", border: "1px solid var(--border)",
+                 borderRadius: 6, padding: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+        {groups.length === 0 && <option value="">加载资源组中…</option>}
+        {groups.map((g) => (
+          <option key={g.groupId} value={g.groupId}>
+            {g.region}（{g.groupId}）· 门槛 {g.minBenchmarkScore}
+          </option>
+        ))}
+      </select>
+      <button onClick={scan} disabled={scanning || !groupId}
         style={{ display: "block", width: "100%", background: "var(--accent)", color: "white", border: "none",
-                 borderRadius: 6, padding: "var(--space-2)", cursor: "pointer", transition: "200ms ease-out" }}>
+                 borderRadius: 6, padding: "var(--space-2)", cursor: "pointer", transition: "200ms ease-out",
+                 opacity: scanning || !groupId ? 0.6 : 1 }}>
         {scanning ? "检测中…" : "扫描设备并生成指纹"}
       </button>
+      <div style={{ color: "var(--muted)", fontSize: 11, marginTop: "var(--space-2)" }}>
+        指纹终身只生成一次，注册后与本机永久绑定
+      </div>
       {error && <div style={{ color: "oklch(60% 0.15 30)", marginTop: "var(--space-2)" }}>{error}</div>}
     </div>
   );

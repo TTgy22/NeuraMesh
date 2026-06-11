@@ -8,7 +8,7 @@
 - **团队**：4 人（CEO / CTO / 区块链工程师 / 全栈工程师）—— Agent 全权负责实现
 - **工作目录**：`c:\dev\NeuraMesh`（Windows / PowerShell）
 - **远程仓库**：https://github.com/TTgy22/NeuraMesh
-- **当前进度**：Pause 5 本地全部完成（Demo 集成 + 资源组架构 + 可视化 + JMH + Docker），114 测试全绿，待用户确认后提交 git。P4 已 push（739dc09）。
+- **当前进度**：P5 两段已提交（dbfa7c8/56e7d16）。P6 Step 0 真实化改造 + Step 0.5 "无合格节点"修复 + 设备指纹终身持久化已完成并提交推送。后端 123 测试全绿 + node 前端 Vitest 6 全绿 + bootRun 全流程 curl 验证通过。
 
 ## 二、技术栈（不可更改）
 | 类别 | 选型 | 版本 |
@@ -168,8 +168,34 @@ txId = SHA-256(typeOrdinal||from||to||nonce||payloadLen||payload||timestamp)，�
 - **关键**：StateMachine.apply 不验签（仅 nonce），故购买扣款构造无签名 TOKEN_TRANSFER 即可由状态机扣款守恒。groupPrivateKey 明文交付（TODO P6 加密）。
 - **dashboard**：`api.ts` +auth(localStorage token/Authorization 头)+register/login/me/myBalance/market/buyGroup/renewGroup/myGroups。新增页 `LoginPage`(登录/注册)、`MarketPage`(卡片网格+排序)、`BuyModal`(时长/费用/余额/凭证)、`MyGroupsPage`(已购+续费)。`App.tsx` +登录态/退出/侧栏用户信息+路由(/market /vendor-groups /login)。`npm run build` 通过。
 - **测试**：新增 `AuthPurchaseTest`(4 用例：注册登录余额购买全流程/重复用户名/错密码/余额不足)。clean test **118 测试 0 失败**（106 P4 +8 资源组 +4 auth）。聚合 LINE 77.1%（vm.state 70.1/group 81.5）≥70%。
-- **提交信息预备（下半）**：`[P5] feat: 用户系统 + 安全组公钥私钥 + 厂商购买界面`。
-- **CRLF 噪声**：TxPool/VoteCollectorTest/GossipProtocol/StateMachineTest 4 文件为行尾噪声，提交时勿纳入。
+- **提交信息预备（下半）**：`[P5] feat: 用户系统 + 安全组公钥私钥 + 厂商购买界面`（已提交 56e7d16，含角色权限/阿里云式市场/总览动态化）。
+
+### Pause 6 Step 0（真实化改造，本地完成待提交）
+- **背景**：评委需看到每步真实上链。规则①——提示词的 `Transaction.builder()`/`txPool.addTransaction` 等与实际不符，以实际 API 为准（`Transaction.create`/`TxPool.addTransaction` 确存在）。
+- **核心改造 `ChainService` 真实管线**：原 `applyTx` 直接 stateMachine.apply + 内存 List<Block>（绕过 TxPool/BFT）。**改为**：`txPool.addTransaction` → 单验证者 `BFTConsensus`（独立 bftKey，quorum=1 自达共识，同一调用栈同步走完 PrePrepare/Prepare/Commit 真实 ECDSA+VoteCollector）→ `finalizeBlock` 写 `InMemoryBlockStore` → `onFinalized` 回调里 `StateMachine.apply` 执行。**同步**返回保持调用方语义。
+- **两套验证者集解耦**：BFT 出块用 1 验证者（自达共识）；StateMachine WEIGHT_UPDATE 见证仍用 4 验证者。互不冲突。
+- **交易生命周期**：txStatus map（pending→finalized→executed/rejected）；`ChainService.txLifecycle(hash)`；`GET /chain/tx/{hash}/status` 端点。执行失败经 `pendingError` 回传 applyTx 抛出（状态机已回滚）。
+- **区块/交易真实读取**：latestBlocks 从 BlockStore 倒序、findTx 从 txIndex（onFinalized 填充）、blockHeight=currentHeight+1。
+- **前端**：核查无数据 mock（仅 PixelIntro 动画用 Math.random、VendorConsole.test 桩）。VendorConsole 历史项加 `TxChainStatus` 轮询 `/chain/tx/{hash}/status` 显示真实链上状态。api.ts +txStatus。
+- **测试**：新增 `RealEndToEndTest.fullDemoScenario`（注册→节点上链→购买扣款→任务结算，断言真实区块/64hex 哈希/txLifecycle=executed/余额变更/节点收益）。**全量 BUILD SUCCESSFUL**，api 10 测试全绿，前端 build+test 通过。
+- **提交信息预备**：`[P6] fix: 真实化改造 - API真实调用链 + 前端真实数据 + 端到端测试`。
+- **债务**：funding 仍直写（创世简化，非 tx）；单验证者本地共识（多节点 P2P 共识装配待赛后）；RocksDB 持久化未接（InMemoryBlockStore）。
+- **CRLF 噪声**：TxPool/VoteCollectorTest/GossipProtocol/StateMachineTest 4 文件为行尾噪声，已 `git checkout --` 还原，未纳入提交。
+
+### Pause 6 Step 0.5（"无合格节点"修复 + 设备指纹终身持久化，2026-06-11 完成）
+- **根因**：节点注册（NodeService.register）从不传 resourceGroupId → 节点不属于任何组；VendorConsole 选中已购组下发任务 → 组内无成员 → `ResourceGroupService.allocateTask` 报"无合格节点" FAILED。
+- **VM 修复（共识语义变更，确定性）**：
+  - `NodeRegisterProcessor`：①注册即赋初始权重 `setScores(max(hw,1),0,0,0)` → totalWeight=max(hw,1)*0.3>0，即时具备结算资格（WEIGHT_UPDATE 随后覆盖四项分数）；②未指定组兜底加入 `DEFAULT_GROUP_ID="general-purpose"`（不存在则确定性自动创建，门槛 0/无 HTTP2，永不拒绝）。常量暴露在处理器上。
+  - `TaskSettleProcessor.resolveFromGroup`：精确报因三分支——组不存在/组为空（"为空"）/全员无有效权重（"无有效权重"），不再返回空列表落入笼统报错。
+  - **测试影响**：NodeRegisterTest 权重断言 0→1500（hw5000*0.3）；WeightUpdateTest 回滚基准 0→0.3；ResourceGroupTest +4 修复用例（兜底分组/默认组结算守恒/组空报因/零权重报因）。
+- **API**：seed 增播 `general-purpose`（通用-全局，门槛 0，8000/h，"默认组"标签）；`allocateTask` 失败日志精确区分组空/未注册/离线/权重 0；`NodeService.register(model, groupId)` 重载（旧 1 参委托）；`NodeRegisterRequest`+resourceGroupId；`NodeStatusDTO`+fingerprint(hex)。
+- **节点客户端（Electron）指纹终身持久化**（用户 Patch 1/2 按实际架构适配：指纹由后端生成，客户端持久化的是注册回执身份）：
+  - `renderer/utils/fingerprintStorage.ts`：NodeIdentity{nodeId,fingerprint,deviceModel,resourceGroupId,registeredAt}，key=`neuramesh_device_fingerprint_v1`，双层存储——主进程文件优先 + localStorage 兜底，损坏自清理。
+  - `main/fingerprintManager.ts`：userData/neuramesh-fingerprint.json；`preload/preload.ts`（contextBridge 暴露 window.neuraIdentity，**CJS 编译** tsconfig.preload.json，sandbox 预加载不受 type:module 影响）；main.ts +ipcMain.handle(identity:load/save/clear)+启动日志；**ESM 主进程无 __dirname，已用 fileURLToPath(import.meta.url) 修复**（连带修复了原 loadFile 的潜在崩溃）。
+  - `DeviceScanner`：强制资源组选择（/groups 下拉，默认选中 general-purpose，未选禁用按钮），注册成功即 saveIdentity。`NodeDashboard`：挂载先恢复持久化身份（api.status），"已永久绑定/首次生成"徽标 + 指纹展示；仅当后端明确"节点不存在"才清身份。
+  - package.json build:main 追加 preload 编译；NodeDashboard.test 更新 mock（groups/status）+1 恢复用例；新增 fingerprintStorage.test（4 用例）。
+- **后端去重**（用户 Patch 3）：实际代码早已实现且更优（GlobalState 以 hex 字符串存指纹集合，无 byte[] 身份相等坑），无需改动。
+- **验证实录**：`gradlew test` 全绿（vm 12 资源组用例 + api RealEndToEndTest 含组任务断言）；node `npm test` 6 绿 + `npm run build` 通过（dist-main 含 main/preload/fingerprintManager）；bootRun curl 全流程——7 组播种、双节点注册（指定组/兜底组）、组内节点查询、两组 allocate 均 SETTLED、节点 totalEarned=30000、交易 executed、JWT 余额 5,000,000。
 
 ## 十四、下一步（Pause 5 入口条件）
 - 阅读 Pause 5 提示词，确认 P4 债务（真实 AI 推理 TFLite/ONNX、移动端、排行榜、WebSocket、真实设备、RocksDB 持久化装配）。

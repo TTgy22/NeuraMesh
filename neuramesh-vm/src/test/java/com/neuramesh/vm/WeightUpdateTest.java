@@ -108,11 +108,14 @@ class WeightUpdateTest {
                 vc.attest(0, node, 10.0),
                 vc.attest(1, node, 20.0),
                 vc.attest(2, node, 30.0)));
+        // 回滚基准：注册即赋初始权重 hw*0.3（此处 hw=1.0 → 0.3）
+        double weightAfterRegister = state.getNode(node).getTotalWeight();
+        assertThat(weightAfterRegister).isEqualTo(0.3);
         assertThatThrownBy(() -> sm.apply(tx(TxType.WEIGHT_UPDATE, node, node, 1, p.encode()), state))
                 .isInstanceOf(VMException.class)
                 .extracting(e -> ((VMException) e).getKind())
                 .isEqualTo(VMException.Kind.INVALID_WEIGHT_ATTESTATION);
-        // 节点权重仍为 0（回滚）
-        assertThat(state.getNode(node).getTotalWeight()).isZero();
+        // 节点权重维持注册初始值（回滚）
+        assertThat(state.getNode(node).getTotalWeight()).isEqualTo(weightAfterRegister);
     }
 }

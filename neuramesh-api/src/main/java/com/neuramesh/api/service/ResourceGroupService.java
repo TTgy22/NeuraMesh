@@ -13,6 +13,7 @@ import com.neuramesh.vm.group.GroupValidator;
 import com.neuramesh.vm.group.ResourceGroup;
 import com.neuramesh.vm.payload.TaskSettlePayload;
 import com.neuramesh.vm.payload.TokenTransferPayload;
+import com.neuramesh.vm.processors.NodeRegisterProcessor;
 import com.neuramesh.vm.state.NodeState;
 import com.neuramesh.vm.state.ResourceGroupState;
 import jakarta.annotation.PostConstruct;
@@ -95,6 +96,10 @@ public class ResourceGroupService {
     @PostConstruct
     void seed() {
         ResourceGroupState gs = chain.state().resourceGroups();
+        // 兜底默认组：节点注册未选组时由 NodeRegisterProcessor 自动加入（门槛 0，永不拒绝）
+        createIfAbsent(gs, NodeRegisterProcessor.DEFAULT_GROUP_ID,
+                NodeRegisterProcessor.DEFAULT_GROUP_REGION, 0, false, 8_000L,
+                new Spec("通用型 g6·入门", 45, 55, List.of("默认组", "性价比", "SLA99.0")));
         // 阿里云风格规格族：通用型(均衡) / 计算型(高算力) / 高可靠型(冗余) / 存储型 / 网络增强型
         createIfAbsent(gs, "north-china-qingdao", "华北-青岛", 50, false, 20_000L,
                 new Spec("通用型 g7", 50, 50, List.of("均衡", "SLA99.5")));
@@ -214,14 +219,36 @@ public class ResourceGroupService {
         }
 
         List<String> eligible = new ArrayList<>();
+        int registered = 0;
+        int online = 0;
         for (String hex : g.sortedNodeIds()) {
             NodeState ns = chain.state().getNode(CryptoUtils.fromHex(hex));
-            if (ns != null && ns.getTotalWeight() > 0) {
+            if (ns == null) {
+                continue;
+            }
+            registered++;
+            NodeStatusDTO st = nodeService.status(hex);
+            if (st != null && st.online()) {
+                online++;
+            }
+            if (ns.getTotalWeight() > 0) {
                 eligible.add("0x" + hex);
             }
         }
         if (eligible.isEmpty()) {
-            LOG.warn("资源组 {} 内无合格节点，任务 {} 失败", groupId, taskId);
+            // 精确报因：组空 / 成员未注册 / 全部离线 / 权重为 0，便于一眼定位
+            String reason;
+            if (g.nodeCount() == 0) {
+                reason = "组为空（无节点加入该组）";
+            } else if (registered == 0) {
+                reason = "组内 " + g.nodeCount() + " 个成员均未完成链上注册";
+            } else if (online == 0) {
+                reason = "组内 " + registered + " 个已注册节点全部离线且权重为 0";
+            } else {
+                reason = "组内 " + registered + " 个已注册节点（在线 " + online + "）权重全部为 0";
+            }
+            LOG.warn("资源组 {} 无合格节点：{}，任务 {} 失败。请在节点端注册时选择该资源组，"
+                    + "或调用 POST /groups/{}/join 加入", groupId, reason, taskId, groupId);
             return new TaskStatusDTO(taskId, type, "FAILED", fee, null, List.of(), null);
         }
 
