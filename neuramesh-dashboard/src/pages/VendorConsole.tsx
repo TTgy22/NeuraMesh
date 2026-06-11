@@ -3,6 +3,32 @@ import { Link } from "react-router-dom";
 import { TaskForm } from "../components/TaskForm";
 import { api, auth, type MyGroup, type TaskStatus, type UserProfile } from "../api";
 
+// 轮询真实链上交易生命周期（pending/proposed/finalized/executed）。
+function TxChainStatus({ hash }: { hash: string }) {
+  const [status, setStatus] = useState<string>("…");
+  useEffect(() => {
+    let stop = false;
+    const poll = async () => {
+      try {
+        const r = await api.txStatus(hash);
+        if (!stop) setStatus(r.status);
+        if (!stop && r.status !== "executed" && r.status !== "rejected") setTimeout(poll, 1000);
+      } catch { if (!stop) setStatus("unknown"); }
+    };
+    poll();
+    return () => { stop = true; };
+  }, [hash]);
+  const color = status === "executed" ? "var(--success)" : status === "rejected" ? "var(--danger)" : "var(--accent)";
+  const short = hash.length > 18 ? hash.slice(0, 10) + "…" + hash.slice(-6) : hash;
+  return (
+    <div className="mono" style={{ fontSize: 11, marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
+      <span style={{ color: "var(--muted)" }}>链上</span>
+      <span style={{ color }}>{status}</span>
+      <a href={`#/explorer`} title={hash} style={{ color: "var(--muted)" }}>{short}</a>
+    </div>
+  );
+}
+
 // 厂商控制台：关联已购资源组，在所选安全组内下发算力任务并链上结算。
 export function VendorConsole() {
   const [me, setMe] = useState<UserProfile | null>(null);
@@ -100,6 +126,7 @@ export function VendorConsole() {
                   <div style={{ color: "var(--muted)", fontSize: 13 }}>
                     {t.taskType} · 预算 {t.budget} · 分配 {t.assignedNodes.length} 节点
                   </div>
+                  {t.settleTxId && <TxChainStatus hash={t.settleTxId} />}
                 </div>
               ))}
             </div>

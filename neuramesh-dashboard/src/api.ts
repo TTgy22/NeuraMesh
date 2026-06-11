@@ -69,6 +69,7 @@ export const api = {
   stats: () => call<ChainStats>(`/chain/stats`),
   nodeList: () => call<NodeStatus[]>(`/node/list`),
   tx: (hash: string) => call<TxInfo>(`/chain/tx/${hash}`),
+  txStatus: (hash: string) => call<{ hash: string; status: string }>(`/chain/tx/${hash}/status`),
   submitTask: (vendorId: string, taskType: string, budget: number) =>
     call<TaskStatus>(`/task/submit`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget }) }),
   taskStatus: (id: string) => call<TaskStatus>(`/task/${id}/status`),

@@ -90,6 +90,18 @@ public class ChainController {
         return ApiResponse.ok(dto);
     }
 
+    /**
+     * 交易生命周期状态（pending/proposed/finalized/executed/rejected）——前端可轮询。
+     */
+    @GetMapping("/tx/{hash}/status")
+    public ApiResponse<Map<String, Object>> txStatus(@PathVariable("hash") String hash) {
+        String status = chainService.txLifecycle(hash);
+        if (status == null) {
+            return ApiResponse.error(404, "交易不存在: " + hash);
+        }
+        return ApiResponse.ok(Map.of("hash", hash, "status", status));
+    }
+
     @GetMapping("/node/{id}")
     public ApiResponse<Map<String, Object>> nodeProfile(@PathVariable("id") String id) {
         String hex = id.startsWith("0x") ? id.substring(2) : id;
