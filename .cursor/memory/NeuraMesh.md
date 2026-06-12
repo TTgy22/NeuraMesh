@@ -182,6 +182,16 @@ txId = SHA-256(typeOrdinal||from||to||nonce||payloadLen||payload||timestamp)，�
 - **债务**：funding 仍直写（创世简化，非 tx）；单验证者本地共识（多节点 P2P 共识装配待赛后）；RocksDB 持久化未接（InMemoryBlockStore）。
 - **CRLF 噪声**：TxPool/VoteCollectorTest/GossipProtocol/StateMachineTest 4 文件为行尾噪声，已 `git checkout --` 还原，未纳入提交。
 
+### Pause 6 Step 0.6（权重派生 + 演示流量 + 幽灵登录修复 + 打包发布，2026-06-12 完成）
+- **权重派生**：NodeService WEIGHT_UPDATE 的质量/在线/带宽由跑分按 0.9/0.95/0.8 派生 → totalWeight=0.93*hw（跑分被 normalizedScore cap 在 1000，本机恒 930 属正常）。
+- **演示流量**：`DemoTrafficService`（默认关，4s tick 提交 1~2 笔无签名 TOKEN_TRANSFER 演示账户互转，真实出块）+ `GET/POST /chain/demo-traffic` + ThroughputChart 右上开关。测试 `DemoTrafficTest`（tickOnce 确定性断言）。
+- **幽灵登录修复**：内存链重启后旧 JWT 仍验签通过 → /user/me|balance 链上查无用户返回 401；前端 call() 遇 401 自动 auth.clear()+广播 `neura:logout`（App 监听同步 UI）；BuyModal 余额未知禁购（按钮"余额不可用"）。
+- **吞吐切页清零修复**：采样移入 `dashboard/src/throughputStore.ts` 模块级单例（定时器首订阅后常驻），组件只订阅渲染；React 挂载初始帧为空属正常，等 effect 完成。
+- **【打包关键坑】ESM 主进程相对导入必须带 .js 扩展名**（`from "./fingerprintManager.js"`），否则打包后 ERR_MODULE_NOT_FOUND——dev 模式从不跑 Electron 主进程（npm run dev 只起 vite），此坑只在打包后暴露。
+- **打包方法（零下载，国内最稳）**：本地已有 electron 二进制（node_modules/electron/dist）→ robocopy 整目录到 release/NeuraMesh-Node-win32-x64 → electron.exe 改名 NeuraMesh-Node.exe → resources/app 放精简 package.json(name/version/type:module/main)+dist+dist-main → 删 default_app.asar（曾被进程锁住：Compress-Archive 失败，改用 `tar -a -c -f xx.zip --exclude ... -C release .` 成功）。
+- **发布物**：`NeuraMesh-v0.6-win64.zip`(198MB)=bootJar(98.6MB)+dashboard 静态+Node 客户端免安装+启动说明.txt；release/ 与 *.zip 已 gitignore。打包后 exe 烟雾测试通过（4 进程+窗口标题正常）。
+- 提交：4df257d/60df62f（昨日）+ 第一笔权重/流量 + 107aea5 幽灵登录 + 21bde5a ESM/gitignore，全部已推送。
+
 ### Pause 6 Step 0.5（"无合格节点"修复 + 设备指纹终身持久化，2026-06-11 完成）
 - **根因**：节点注册（NodeService.register）从不传 resourceGroupId → 节点不属于任何组；VendorConsole 选中已购组下发任务 → 组内无成员 → `ResourceGroupService.allocateTask` 报"无合格节点" FAILED。
 - **VM 修复（共识语义变更，确定性）**：
