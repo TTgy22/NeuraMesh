@@ -109,7 +109,7 @@ public class ResourceGroupService {
         createIfAbsent(gs, NodeRegisterProcessor.DEFAULT_GROUP_ID,
                 NodeRegisterProcessor.DEFAULT_GROUP_REGION, 0, false, 8_000L,
                 new Spec("通用型 g6·入门", 45, 55, List.of("默认组", "性价比", "SLA99.0")));
-                
+
         createIfAbsent(gs, "north-china-qingdao", "华北-青岛", 50, false, 20_000L,
                 new Spec("通用型 g7", 50, 50, List.of("均衡", "SLA99.5")));
         createIfAbsent(gs, "east-china-shanghai", "华东-上海", 100, true, 50_000L,
@@ -354,6 +354,26 @@ public class ResourceGroupService {
      */
     public TaskStatusDTO groupTask(String taskId) {
         return groupTasks.get(taskId);
+    }
+
+    /**
+     * 全部组任务（新在前）：历史任务以后端注册表为权威，前端切页/刷新不丢失。
+     *
+     * @return 按任务序号倒序的列表
+     */
+    public List<TaskStatusDTO> allGroupTasks() {
+        List<TaskStatusDTO> out = new ArrayList<>(groupTasks.values());
+        out.sort((a, b) -> Long.compare(taskSeqOf(b.taskId()), taskSeqOf(a.taskId())));
+        return out;
+    }
+
+    private static long taskSeqOf(String taskId) {
+        int dash = taskId.lastIndexOf('-');
+        try {
+            return dash < 0 ? 0 : Long.parseLong(taskId.substring(dash + 1));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /**

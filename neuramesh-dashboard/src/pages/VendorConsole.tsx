@@ -46,7 +46,16 @@ export function VendorConsole() {
       setSelected((s) => s || (active[0]?.groupId ?? ""));
     }).catch(() => { /* 后端未启动 */ });
   }, []);
-  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    load();
+    // 历史任务以后端注册表为权威：挂载即拉取（切页/刷新不丢），RUNNING 项恢复轮询
+    api.groupTasks().then((ts) => {
+      setHistory(ts);
+      ts.filter((t) => t.status === "RUNNING").forEach((t) => pollGroupTask(t.taskId));
+    }).catch(() => { /* 后端未启动 */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load]);
 
   const current = groups.find((g) => g.groupId === selected);
 

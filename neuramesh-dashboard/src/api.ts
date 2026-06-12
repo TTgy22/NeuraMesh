@@ -94,6 +94,7 @@ export const api = {
   allocateGroupTask: (id: string, vendorId: string, taskType: string, budget: number, simulateMs = 6000) =>
     call<TaskStatus>(`/groups/${id}/allocate`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget, simulateMs }) }),
   groupTask: (taskId: string) => call<TaskStatus>(`/groups/tasks/${taskId}`),
+  groupTasks: () => call<TaskStatus[]>(`/groups/tasks`),
 
   // 用户系统
   register: (username: string, password: string, role: string) =>

@@ -49,5 +49,11 @@ class GroupTaskSimulationTest {
                 "general-purpose", "sim-vendor", "ocr", 5_000L, 0);
         assertThat(instant.status()).isEqualTo("SETTLED");
         assertThat(groupService.groupTask(instant.taskId()).status()).isEqualTo("SETTLED");
+
+        // 4) 历史任务注册表（前端切页/刷新的权威数据源）：新在前，包含上述任务
+        assertThat(groupService.allGroupTasks())
+                .extracting(TaskStatusDTO::taskId)
+                .contains(running.taskId(), instant.taskId());
+        assertThat(groupService.allGroupTasks().get(0).taskId()).isEqualTo(instant.taskId());
     }
 }

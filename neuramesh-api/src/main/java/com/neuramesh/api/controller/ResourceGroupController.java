@@ -85,6 +85,12 @@ public class ResourceGroupController {
         return ApiResponse.ok(groupService.allocateTask(id, vendorId, taskType, budget, simulateMs));
     }
 
+    /** 全部组任务列表（新在前）：历史任务的权威数据源，前端切页/刷新不丢。 */
+    @GetMapping("/groups/tasks")
+    public ApiResponse<List<TaskStatusDTO>> groupTasks() {
+        return ApiResponse.ok(groupService.allGroupTasks());
+    }
+
     /** 组任务状态查询（前端轮询 RUNNING → SETTLED/FAILED）。 */
     @GetMapping("/groups/tasks/{taskId}")
     public ApiResponse<TaskStatusDTO> groupTask(@PathVariable("taskId") String taskId) {
