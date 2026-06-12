@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from "electron";
+import * as fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 // ESM 运行时要求相对导入带显式扩展名（编译产物为 .js）
@@ -9,6 +10,12 @@ import { ensureBackend, stopBackend } from "./backendLauncher.js";
 // ESM 主进程（package.json type=module）无 __dirname，由 import.meta.url 推导。
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
+/** 品牌 logo（renderer public 构建产物）；缺失时返回空图标兜底。 */
+function appLogo(): Electron.NativeImage {
+  const p = path.join(HERE, "../dist/logo.png");
+  return fs.existsSync(p) ? nativeImage.createFromPath(p) : nativeImage.createEmpty();
+}
+
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
@@ -17,6 +24,7 @@ function createWindow(): void {
     width: 900,
     height: 650,
     backgroundColor: "#0b0d12",
+    icon: appLogo(),
     webPreferences: {
       contextIsolation: true,
       preload: path.join(HERE, "preload.js"),
@@ -38,7 +46,8 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  tray = new Tray(nativeImage.createEmpty());
+  const icon = appLogo();
+  tray = new Tray(icon.isEmpty() ? icon : icon.resize({ width: 16, height: 16 }));
   tray.setToolTip("NeuraMesh 节点 — 实时收益运行中");
   const menu = Menu.buildFromTemplate([
     { label: "显示仪表盘", click: () => win?.show() },

@@ -7,6 +7,7 @@ export function App() {
     <div style={{ minHeight: "100vh" }}>
       <header style={{ display: "flex", gap: "var(--space-3)", padding: "var(--space-3) var(--space-4)",
         borderBottom: "1px solid var(--border)", alignItems: "center" }}>
+        <img src="./logo.png" alt="NeuraMesh" width={24} height={24} style={{ borderRadius: 5 }} />
         <span className="display" style={{ fontWeight: 700 }}>Neura<span style={{ color: "var(--accent)" }}>Mesh</span> 节点</span>
         <nav style={{ display: "flex", gap: "var(--space-2)", marginLeft: "auto" }}>
           {(["dashboard", "settings"] as const).map((t) => (

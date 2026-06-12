@@ -45,6 +45,15 @@ $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
 $form.BackColor = [Drawing.Color]::FromArgb(13, 16, 23)
 
+# 品牌 logo（窗体/任务栏图标），缺失时跳过
+$logoPath = Join-Path $root "dashboard\logo.png"
+if (Test-Path $logoPath) {
+    try {
+        $logoBmp = [Drawing.Bitmap]::FromFile($logoPath)
+        $form.Icon = [Drawing.Icon]::FromHandle($logoBmp.GetHicon())
+    } catch { }
+}
+
 $title = New-Object Windows.Forms.Label
 $title.Text = "NeuraMesh 边缘智算网络"
 $title.Font = New-Object Drawing.Font("Microsoft YaHei UI", 15, [Drawing.FontStyle]::Bold)

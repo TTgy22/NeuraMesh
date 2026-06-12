@@ -49,8 +49,10 @@ export function App() {
     <HashRouter>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <nav style={{ width: 200, background: "var(--bg-2)", borderRight: "1px solid var(--border)", padding: "var(--space-4)", position: "relative" }}>
-          <div className="display" style={{ fontWeight: 700, fontSize: 18, marginBottom: "var(--space-5)" }}>
-            Neura<span style={{ color: "var(--accent)" }}>Mesh</span>
+          <div className="display" style={{ fontWeight: 700, fontSize: 18, marginBottom: "var(--space-5)",
+            display: "flex", alignItems: "center", gap: 8 }}>
+            <img src="/logo.png" alt="NeuraMesh" width={26} height={26} style={{ borderRadius: 6 }} />
+            <span>Neura<span style={{ color: "var(--accent)" }}>Mesh</span></span>
           </div>
           {NAV.filter((n) => n.roles.length === 0
             || (me != null && (me.role === "ADMIN" || n.roles.includes(me.role)))).map((n) => (
