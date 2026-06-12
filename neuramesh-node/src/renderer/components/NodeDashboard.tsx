@@ -40,6 +40,15 @@ export function NodeDashboard() {
     return () => { cancelled = true; };
   }, []);
 
+  // 实时刷新：每 5s 拉取链上状态（收益结算到账即更新收益卡与曲线）
+  useEffect(() => {
+    if (!node?.nodeId) return;
+    const t = setInterval(() => {
+      api.status(node.nodeId).then(setNode).catch(() => { /* 后端暂不可达：保留现值 */ });
+    }, 5000);
+    return () => clearInterval(t);
+  }, [node?.nodeId]);
+
   function onRegistered(n: NodeStatus) {
     setNode(n);
     setBound(false); // 首次生成
@@ -132,7 +141,7 @@ export function NodeDashboard() {
             <div>总权重: {node.totalWeight.toFixed(1)}</div>
           </div>
         </div>
-        <EarningsChart nodeId={node.nodeId} />
+        <EarningsChart nodeId={node.nodeId} refreshKey={node.totalEarned} />
       </div>
     </div>
   );

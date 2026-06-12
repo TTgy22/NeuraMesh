@@ -91,8 +91,9 @@ export const api = {
   groupNodes: (id: string) => call<NodeStatus[]>(`/groups/${id}/nodes`),
   joinGroup: (id: string, nodeId: string) =>
     call<ResourceGroup>(`/groups/${id}/join`, { method: "POST", body: JSON.stringify({ nodeId }) }),
-  allocateGroupTask: (id: string, vendorId: string, taskType: string, budget: number) =>
-    call<TaskStatus>(`/groups/${id}/allocate`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget }) }),
+  allocateGroupTask: (id: string, vendorId: string, taskType: string, budget: number, simulateMs = 6000) =>
+    call<TaskStatus>(`/groups/${id}/allocate`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget, simulateMs }) }),
+  groupTask: (taskId: string) => call<TaskStatus>(`/groups/tasks/${taskId}`),
 
   // 用户系统
   register: (username: string, password: string, role: string) =>

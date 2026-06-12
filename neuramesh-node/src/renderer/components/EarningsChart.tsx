@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type EarningsPoint } from "../api";
 
-export function EarningsChart({ nodeId }: { nodeId: string }) {
+// refreshKey：父组件传 totalEarned，收益变化即重拉曲线（后端为 5s 粒度实时采样序列）
+export function EarningsChart({ nodeId, refreshKey }: { nodeId: string; refreshKey?: number }) {
   const [range, setRange] = useState<7 | 30>(7);
   const [data, setData] = useState<EarningsPoint[]>([]);
 
   useEffect(() => {
     if (!nodeId) return;
     api.earnings(nodeId, range).then(setData).catch(() => setData([]));
-  }, [nodeId, range]);
+  }, [nodeId, range, refreshKey]);
 
   return (
     <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "var(--space-3)" }}>

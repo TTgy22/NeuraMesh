@@ -50,6 +50,24 @@ export function VendorConsole() {
 
   const current = groups.find((g) => g.groupId === selected);
 
+  // RUNNING 任务轮询：模拟计算结束（真实上链）后刷新历史项与余额
+  function pollGroupTask(taskId: string) {
+    const tick = async () => {
+      try {
+        const t = await api.groupTask(taskId);
+        setHistory((h) => h.map((x) => (x.taskId === taskId ? t : x)));
+        if (t.status === "RUNNING") {
+          setTimeout(tick, 1000);
+        } else {
+          load(); // 结算完成：刷新余额
+        }
+      } catch {
+        // 后端不可达：停止轮询
+      }
+    };
+    setTimeout(tick, 1000);
+  }
+
   async function submit(taskType: string, budget: number) {
     setError(null);
     try {
@@ -58,6 +76,9 @@ export function VendorConsole() {
         ? await api.allocateGroupTask(selected, vendorId, taskType, budget)
         : await api.submitTask(vendorId, taskType, budget);
       setHistory((h) => [task, ...h]);
+      if (task.status === "RUNNING") {
+        pollGroupTask(task.taskId);
+      }
       load();
     } catch (e) {
       setError((e as Error).message);
@@ -121,14 +142,26 @@ export function VendorConsole() {
                   borderRadius: 8, padding: "var(--space-3)", marginBottom: "var(--space-2)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="mono">{t.taskId}</span>
-                    <span style={{ color: t.status === "SETTLED" ? "var(--success)" : "var(--danger)" }}>{t.status}</span>
+                    <span style={{ color: t.status === "SETTLED" ? "var(--success)"
+                      : t.status === "RUNNING" ? "var(--accent)" : "var(--danger)" }}>
+                      {t.status === "RUNNING" ? "RUNNING · 节点计算中…" : t.status}
+                    </span>
                   </div>
                   <div style={{ color: "var(--muted)", fontSize: 13 }}>
                     {t.taskType} · 预算 {t.budget} · 分配 {t.assignedNodes.length} 节点
                   </div>
+                  {t.status === "RUNNING" && (
+                    <div style={{ height: 4, background: "var(--panel-2)", borderRadius: 2,
+                      overflow: "hidden", marginTop: 6 }}>
+                      <div className="task-progress" style={{ height: "100%", width: "40%",
+                        background: "var(--accent)", borderRadius: 2 }} />
+                    </div>
+                  )}
                   {t.settleTxId && <TxChainStatus hash={t.settleTxId} />}
                 </div>
               ))}
+              <style>{`.task-progress { animation: taskSlide 1.2s ease-in-out infinite alternate; }
+                @keyframes taskSlide { from { margin-left: 0; } to { margin-left: 60%; } }`}</style>
             </div>
           </div>
         </>

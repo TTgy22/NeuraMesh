@@ -77,7 +77,22 @@ public class ResourceGroupController {
         if (body != null && body.get("budget") instanceof Number n) {
             budget = n.longValue();
         }
-        return ApiResponse.ok(groupService.allocateTask(id, vendorId, taskType, budget));
+        // 默认 6s 模拟计算（RUNNING → 真实上链 SETTLED）；传 0 可即时结算
+        long simulateMs = 6000;
+        if (body != null && body.get("simulateMs") instanceof Number sm) {
+            simulateMs = sm.longValue();
+        }
+        return ApiResponse.ok(groupService.allocateTask(id, vendorId, taskType, budget, simulateMs));
+    }
+
+    /** 组任务状态查询（前端轮询 RUNNING → SETTLED/FAILED）。 */
+    @GetMapping("/groups/tasks/{taskId}")
+    public ApiResponse<TaskStatusDTO> groupTask(@PathVariable("taskId") String taskId) {
+        TaskStatusDTO dto = groupService.groupTask(taskId);
+        if (dto == null) {
+            return ApiResponse.error(404, "任务不存在: " + taskId);
+        }
+        return ApiResponse.ok(dto);
     }
 
     // ---- 市场（浏览公开，购买/续费需认证）----

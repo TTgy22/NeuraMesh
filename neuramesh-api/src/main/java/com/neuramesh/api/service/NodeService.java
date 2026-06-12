@@ -12,12 +12,21 @@ import com.neuramesh.vm.Attestation;
 import com.neuramesh.vm.payload.NodeRegisterPayload;
 import com.neuramesh.vm.payload.WeightUpdatePayload;
 import com.neuramesh.vm.state.NodeState;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.security.KeyPair;
 import java.security.SecureRandom;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -41,8 +50,48 @@ public class NodeService {
     private final Map<String, Boolean> online = new ConcurrentHashMap<>();
     private final Map<String, String> deviceModels = new ConcurrentHashMap<>();
 
+    /** 收益实时采样：nodeIdHex → (时间标签, 累计收益) 环形历史，驱动节点端实时收益曲线。 */
+    private static final int EARNINGS_HISTORY_MAX = 120;
+    private static final long SAMPLE_INTERVAL_S = 5;
+    private final Map<String, Deque<EarningsPointDTO>> earningsHistory = new ConcurrentHashMap<>();
+    private ScheduledExecutorService sampler;
+
     public NodeService(ChainService chain) {
         this.chain = chain;
+    }
+
+    @PostConstruct
+    void startEarningsSampler() {
+        sampler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "earnings-sampler");
+            t.setDaemon(true);
+            return t;
+        });
+        sampler.scheduleWithFixedDelay(this::sampleEarnings,
+                SAMPLE_INTERVAL_S, SAMPLE_INTERVAL_S, TimeUnit.SECONDS);
+    }
+
+    @PreDestroy
+    void stopEarningsSampler() {
+        if (sampler != null) {
+            sampler.shutdownNow();
+        }
+    }
+
+    private void sampleEarnings() {
+        String label = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        for (String hex : nodeKeys.keySet()) {
+            NodeState ns = chain.state().getNode(hexToBytes(hex));
+            if (ns == null) {
+                continue;
+            }
+            Deque<EarningsPointDTO> history =
+                    earningsHistory.computeIfAbsent(hex, k -> new ConcurrentLinkedDeque<>());
+            history.addLast(new EarningsPointDTO(label, ns.getTotalEarned()));
+            while (history.size() > EARNINGS_HISTORY_MAX) {
+                history.pollFirst();
+            }
+        }
     }
 
     /**
@@ -131,14 +180,21 @@ public class NodeService {
     }
 
     /**
-     * 收益曲线：将累计收益按天分布（真实结构，来自链上 totalEarned）。
+     * 收益曲线：优先返回实时采样的累计收益时间序列（5s 粒度，结算到账即上扬）；
+     * 节点尚无采样历史时回退为按天均摊（兼容刚注册场景）。
      *
      * @param nodeIdHex 节点地址
-     * @param days      天数
+     * @param days      回退模式的天数 / 采样模式下用于限制点数（days*10，至少 30 点）
      * @return 收益点列表
      */
     public List<EarningsPointDTO> earnings(String nodeIdHex, int days) {
         String hex = strip(nodeIdHex);
+        Deque<EarningsPointDTO> history = earningsHistory.get(hex);
+        if (history != null && history.size() >= 2) {
+            List<EarningsPointDTO> all = new ArrayList<>(history);
+            int limit = Math.min(all.size(), Math.max(30, days * 10));
+            return all.subList(all.size() - limit, all.size());
+        }
         NodeState ns = chain.state().getNode(hexToBytes(hex));
         long total = ns == null ? 0 : ns.getTotalEarned();
         int n = Math.max(1, days);

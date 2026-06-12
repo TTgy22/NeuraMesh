@@ -17,6 +17,7 @@ import com.neuramesh.vm.processors.NodeRegisterProcessor;
 import com.neuramesh.vm.state.NodeState;
 import com.neuramesh.vm.state.ResourceGroupState;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.util.ArrayList;
@@ -24,7 +25,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +67,10 @@ public class ResourceGroupService {
     private final Map<String, List<Purchase>> purchases = new ConcurrentHashMap<>();
     /** 资源组规格元数据（groupId → Spec），仅 API 层展示用，不入链。 */
     private final Map<String, Spec> specs = new ConcurrentHashMap<>();
+    /** 组任务注册表（taskId → 最新状态），供前端轮询 RUNNING → SETTLED 过程。 */
+    private final ConcurrentMap<String, TaskStatusDTO> groupTasks = new ConcurrentHashMap<>();
+    /** 模拟计算调度器：到点执行真实 TASK_SETTLE 上链。 */
+    private ScheduledExecutorService simulator;
 
     /** 一笔资源组购买（可变到期时间，支持续费叠加）。 */
     private static final class Purchase {
@@ -100,7 +109,7 @@ public class ResourceGroupService {
         createIfAbsent(gs, NodeRegisterProcessor.DEFAULT_GROUP_ID,
                 NodeRegisterProcessor.DEFAULT_GROUP_REGION, 0, false, 8_000L,
                 new Spec("通用型 g6·入门", 45, 55, List.of("默认组", "性价比", "SLA99.0")));
-        // 阿里云风格规格族：通用型(均衡) / 计算型(高算力) / 高可靠型(冗余) / 存储型 / 网络增强型
+                
         createIfAbsent(gs, "north-china-qingdao", "华北-青岛", 50, false, 20_000L,
                 new Spec("通用型 g7", 50, 50, List.of("均衡", "SLA99.5")));
         createIfAbsent(gs, "east-china-shanghai", "华东-上海", 100, true, 50_000L,
@@ -114,6 +123,19 @@ public class ResourceGroupService {
         createIfAbsent(gs, "southwest-china-chengdu", "西南-成都", 40, false, 18_000L,
                 new Spec("通用型 g7", 55, 45, List.of("性价比", "SLA99.0")));
         LOG.info("资源组播种完成：{} 个组", gs.groupCount());
+
+        simulator = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "task-simulator");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    @PreDestroy
+    void shutdownSimulator() {
+        if (simulator != null) {
+            simulator.shutdownNow();
+        }
     }
 
     private void createIfAbsent(ResourceGroupState gs, String id, String region,
@@ -200,7 +222,7 @@ public class ResourceGroupService {
     }
 
     /**
-     * 在指定资源组内分配并结算一个任务（按组内节点权重自动分配）。
+     * 在指定资源组内分配并立即结算一个任务（按组内节点权重自动分配，无模拟计算）。
      *
      * @param groupId  资源组 id
      * @param vendorId 厂商标签
@@ -208,14 +230,33 @@ public class ResourceGroupService {
      * @param budget   预算
      * @return 任务状态
      */
+    public TaskStatusDTO allocateTask(String groupId, String vendorId,
+                                      String taskType, long budget) {
+        return allocateTask(groupId, vendorId, taskType, budget, 0);
+    }
+
+    /**
+     * 在指定资源组内分配任务，可选模拟计算阶段。
+     *
+     * <p>{@code simulateMs > 0}：先返回 RUNNING（节点"执行推理"），到点由调度器执行真实
+     * TASK_SETTLE 上链结算 → SETTLED；前端经 {@code GET /groups/tasks/{id}} 轮询过程。
+     * {@code simulateMs <= 0}：同步立即结算（测试/脚本路径）。
+     *
+     * @param groupId    资源组 id
+     * @param vendorId   厂商标签
+     * @param taskType   任务类型
+     * @param budget     预算
+     * @param simulateMs 模拟计算时长（毫秒，<=0 表示即时结算）
+     * @return 任务状态（RUNNING / SETTLED / FAILED）
+     */
     public synchronized TaskStatusDTO allocateTask(String groupId, String vendorId,
-                                                   String taskType, long budget) {
+                                                   String taskType, long budget, long simulateMs) {
         ResourceGroup g = chain.state().resourceGroups().getGroup(groupId);
         String taskId = "gtask-" + taskSeq.getAndIncrement();
         String type = (taskType == null || taskType.isBlank()) ? "image-classification" : taskType;
         long fee = budget > 0 ? budget : 30_000L;
         if (g == null) {
-            return new TaskStatusDTO(taskId, type, "FAILED", fee, null, List.of(), null);
+            return remember(new TaskStatusDTO(taskId, type, "FAILED", fee, null, List.of(), null));
         }
 
         List<String> eligible = new ArrayList<>();
@@ -249,17 +290,42 @@ public class ResourceGroupService {
             }
             LOG.warn("资源组 {} 无合格节点：{}，任务 {} 失败。请在节点端注册时选择该资源组，"
                     + "或调用 POST /groups/{}/join 加入", groupId, reason, taskId, groupId);
-            return new TaskStatusDTO(taskId, type, "FAILED", fee, null, List.of(), null);
+            return remember(new TaskStatusDTO(taskId, type, "FAILED", fee, null, List.of(), null));
         }
 
         String label = (vendorId == null || vendorId.isBlank()) ? "vendor-1" : vendorId;
+        if (simulateMs <= 0) {
+            return remember(settleOnChain(groupId, taskId, label, type, fee, eligible));
+        }
+
+        // 模拟计算阶段：任务进入 RUNNING，节点"执行推理"，到点真实上链结算
+        LOG.info("资源组 {} 任务 {} 进入模拟计算（{} ms，{} 节点参与）",
+                groupId, taskId, simulateMs, eligible.size());
+        TaskStatusDTO running = remember(
+                new TaskStatusDTO(taskId, type, "RUNNING", fee, null, eligible, null));
+        simulator.schedule(() -> {
+            try {
+                TaskStatusDTO settled;
+                synchronized (this) {
+                    settled = settleOnChain(groupId, taskId, label, type, fee, eligible);
+                }
+                remember(settled);
+            } catch (Exception e) {
+                LOG.warn("任务 {} 模拟计算后结算失败：{}", taskId, e.getMessage());
+                remember(new TaskStatusDTO(taskId, type, "FAILED", fee, null, eligible, null));
+            }
+        }, simulateMs, TimeUnit.MILLISECONDS);
+        return running;
+    }
+
+    /** 真实上链结算（TASK_SETTLE，空分配 + groupId 由状态机按组内权重自动分配）。 */
+    private TaskStatusDTO settleOnChain(String groupId, String taskId, String label,
+                                        String type, long fee, List<String> eligible) {
         KeyPair kp = vendorKeys.computeIfAbsent(label, k -> CryptoUtils.generateKeyPair());
         byte[] vendorAddr = CryptoUtils.toAddress(kp.getPublic());
         if (chain.balanceOf(vendorAddr) < fee) {
             chain.fund(vendorAddr, INITIAL_FUNDING);
         }
-
-        // 空分配 + groupId：状态机在组内按权重自动分配
         TaskSettlePayload payload = new TaskSettlePayload(
                 taskId.getBytes(StandardCharsets.UTF_8), fee, List.of(), groupId);
         long nonce = chain.nonceOf(vendorAddr);
@@ -273,6 +339,21 @@ public class ResourceGroupService {
         return new TaskStatusDTO(taskId, type, "SETTLED", fee,
                 "0x" + CryptoUtils.toHex(tx.getTxId()), eligible,
                 "https://placeholder.co/400x300?text=" + taskId);
+    }
+
+    private TaskStatusDTO remember(TaskStatusDTO task) {
+        groupTasks.put(task.taskId(), task);
+        return task;
+    }
+
+    /**
+     * 查询组任务状态（前端轮询 RUNNING → SETTLED/FAILED）。
+     *
+     * @param taskId 任务 id
+     * @return 状态；不存在返回 null
+     */
+    public TaskStatusDTO groupTask(String taskId) {
+        return groupTasks.get(taskId);
     }
 
     /**
