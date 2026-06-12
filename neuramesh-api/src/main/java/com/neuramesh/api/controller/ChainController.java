@@ -6,6 +6,7 @@ import com.neuramesh.api.dto.ChainStatsDTO;
 import com.neuramesh.api.dto.NodeStatusDTO;
 import com.neuramesh.api.dto.TxInfoDTO;
 import com.neuramesh.api.service.ChainService;
+import com.neuramesh.api.service.DemoTrafficService;
 import com.neuramesh.api.service.NodeService;
 import com.neuramesh.core.CryptoUtils;
 import com.neuramesh.vm.state.NodeState;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,10 +31,13 @@ public class ChainController {
 
     private final ChainService chainService;
     private final NodeService nodeService;
+    private final DemoTrafficService demoTraffic;
 
-    public ChainController(ChainService chainService, NodeService nodeService) {
+    public ChainController(ChainService chainService, NodeService nodeService,
+                           DemoTrafficService demoTraffic) {
         this.chainService = chainService;
         this.nodeService = nodeService;
+        this.demoTraffic = demoTraffic;
     }
 
     /**
@@ -100,6 +105,21 @@ public class ChainController {
             return ApiResponse.error(404, "交易不存在: " + hash);
         }
         return ApiResponse.ok(Map.of("hash", hash, "status", status));
+    }
+
+    /** 演示流量状态。 */
+    @GetMapping("/demo-traffic")
+    public ApiResponse<Map<String, Object>> demoTrafficStatus() {
+        return ApiResponse.ok(Map.of("enabled", demoTraffic.isEnabled()));
+    }
+
+    /**
+     * 开关演示流量：开启后定时提交小额真实互转交易，驱动持续出块（吞吐曲线波动）。
+     */
+    @PostMapping("/demo-traffic")
+    public ApiResponse<Map<String, Object>> setDemoTraffic(
+            @RequestParam("enabled") boolean enabled) {
+        return ApiResponse.ok(Map.of("enabled", demoTraffic.setEnabled(enabled)));
     }
 
     @GetMapping("/node/{id}")

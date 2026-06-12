@@ -84,10 +84,15 @@ public class NodeService {
         // 2) WEIGHT_UPDATE（≥2 验证者一致见证，覆盖为完整四项分数）
         double hardware = normalizedScore(result);
         double claimed = hardware;
+        // 质量/在线/带宽由跑分按比例派生（真实测量 TODO P6：任务校验/心跳累计/测速），
+        // totalWeight = hw*0.3 + 0.9hw*0.4 + 0.95hw*0.2 + 0.8hw*0.1 = 0.93*hw —— 权重随设备性能变化
+        double quality = hardware * 0.90;
+        double uptime = hardware * 0.95;
+        double bandwidth = hardware * 0.80;
         List<Attestation> atts = new ArrayList<>();
         atts.add(chain.attest(0, nodeId, claimed));
         atts.add(chain.attest(1, nodeId, claimed));
-        WeightUpdatePayload wu = new WeightUpdatePayload(nodeId, hardware, 800, 900, 700, atts);
+        WeightUpdatePayload wu = new WeightUpdatePayload(nodeId, hardware, quality, uptime, bandwidth, atts);
         chain.applyTx(signTx(TxType.WEIGHT_UPDATE, kp, nodeId, nodeId, 1, wu.encode()));
 
         online.put(nodeIdHex, true);
