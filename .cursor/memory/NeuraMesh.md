@@ -191,6 +191,8 @@ txId = SHA-256(typeOrdinal||from||to||nonce||payloadLen||payload||timestamp)，�
 - **打包方法（零下载，国内最稳）**：本地已有 electron 二进制（node_modules/electron/dist）→ robocopy 整目录到 release/NeuraMesh-Node-win32-x64 → electron.exe 改名 NeuraMesh-Node.exe → resources/app 放精简 package.json(name/version/type:module/main)+dist+dist-main → 删 default_app.asar（曾被进程锁住：Compress-Archive 失败，改用 `tar -a -c -f xx.zip --exclude ... -C release .` 成功）。
 - **发布物**：`NeuraMesh-v0.6-win64.zip`(198MB)=bootJar(98.6MB)+dashboard 静态+Node 客户端免安装+启动说明.txt；release/ 与 *.zip 已 gitignore。打包后 exe 烟雾测试通过（4 进程+窗口标题正常）。
 - 提交：4df257d/60df62f（昨日）+ 第一笔权重/流量 + 107aea5 幽灵登录 + 21bde5a ESM/gitignore，全部已推送。
+- **内置启动器（客户端即启动器）**：`main/backendLauncher.ts`——whenReady 探测 127.0.0.1:8080（/chain/stats，fetch+AbortController），空闲则在 exe 同级/上两级目录找 `neuramesh-api*.jar`，`spawn("java",["-jar",...])` 拉起（日志 userData/backend.log，java 缺失走异步 error 事件 ENOENT），1.5s×40 轮询就绪；`will-quit` 关闭自拉后端（外部后端不杀）。`DeviceScanner` 后端未就绪每 3s 自动重连（"正在连接后端（启动器拉起中）…"）。release 根附 `一键启动节点.bat`（ASCII 输出防乱码：where java 检查→start exe）。烟雾验证：8080 FREE→双击 exe→30s 后 BACKEND UP+7 组就绪 ✓。
+- **【robocopy 坑】**目标文件被进程锁住时默认 /R:1000000 /W:30 无限重试卡死——必须加 /R:1 /W:1；终端会话期间多条命令异常缓慢/被中断，文件状态优先用 Read/Glob 工具核对（Glob 对新文件有缓存延迟，以 Read 为准）。
 
 ### Pause 6 Step 0.5（"无合格节点"修复 + 设备指纹终身持久化，2026-06-11 完成）
 - **根因**：节点注册（NodeService.register）从不传 resourceGroupId → 节点不属于任何组；VendorConsole 选中已购组下发任务 → 组内无成员 → `ResourceGroupService.allocateTask` 报"无合格节点" FAILED。

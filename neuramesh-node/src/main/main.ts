@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 // ESM 运行时要求相对导入带显式扩展名（编译产物为 .js）
 import { loadIdentity, saveIdentity, clearIdentity, type NodeIdentity } from "./fingerprintManager.js";
+import { ensureBackend, stopBackend } from "./backendLauncher.js";
 
 // Electron 主进程：创建窗口、系统托盘（最小化到托盘），后台运行节点逻辑。
 // ESM 主进程（package.json type=module）无 __dirname，由 import.meta.url 推导。
@@ -75,7 +76,12 @@ app.whenReady().then(() => {
   }
   createWindow();
   createTray();
+  // 启动器：异步确保后端可用（复用已有 8080 或拉起包内 jar），窗口先行打开，渲染层自动重连
+  void ensureBackend().then((result) => console.log(`[launcher] 结果: ${result}`));
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// 退出时关闭由启动器拉起的内置后端（外部后端不受影响）
+app.on("will-quit", () => stopBackend());

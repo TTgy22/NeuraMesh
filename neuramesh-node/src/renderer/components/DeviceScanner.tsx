@@ -8,16 +8,30 @@ export function DeviceScanner({ onRegistered }: { onRegistered: (n: NodeStatus) 
   const [model, setModel] = useState("RTX-4090");
   const [groups, setGroups] = useState<ResourceGroup[]>([]);
   const [groupId, setGroupId] = useState("");
+  const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.groups()
-      .then((gs) => {
-        setGroups(gs);
-        // 必须归属一组：默认选中兜底组 general-purpose，不存在则取第一个
-        setGroupId((cur) => cur || (gs.find((g) => g.groupId === "general-purpose")?.groupId ?? gs[0]?.groupId ?? ""));
-      })
-      .catch(() => setError("无法加载资源组列表，请确认后端已启动"));
+    let stopped = false;
+    // 内置启动器拉起后端约需 10~30s：失败则每 3s 自动重试，就绪后即可注册
+    const load = () => {
+      api.groups()
+        .then((gs) => {
+          if (stopped) return;
+          setGroups(gs);
+          setConnecting(false);
+          setError(null);
+          // 必须归属一组：默认选中兜底组 general-purpose，不存在则取第一个
+          setGroupId((cur) => cur || (gs.find((g) => g.groupId === "general-purpose")?.groupId ?? gs[0]?.groupId ?? ""));
+        })
+        .catch(() => {
+          if (stopped) return;
+          setConnecting(true);
+          setTimeout(load, 3000);
+        });
+    };
+    load();
+    return () => { stopped = true; };
   }, []);
 
   async function scan() {
@@ -58,7 +72,9 @@ export function DeviceScanner({ onRegistered }: { onRegistered: (n: NodeStatus) 
         style={{ display: "block", width: "100%", boxSizing: "border-box", background: "var(--bg)",
                  color: "var(--text)", border: "1px solid var(--border)",
                  borderRadius: 6, padding: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-        {groups.length === 0 && <option value="">加载资源组中…</option>}
+        {groups.length === 0 && (
+          <option value="">{connecting ? "正在连接后端（启动器拉起中）…" : "加载资源组中…"}</option>
+        )}
         {groups.map((g) => (
           <option key={g.groupId} value={g.groupId}>
             {g.region}（{g.groupId}）· 门槛 {g.minBenchmarkScore}
