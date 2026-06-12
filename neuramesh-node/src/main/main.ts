@@ -1,7 +1,8 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadIdentity, saveIdentity, clearIdentity, type NodeIdentity } from "./fingerprintManager";
+// ESM 运行时要求相对导入带显式扩展名（编译产物为 .js）
+import { loadIdentity, saveIdentity, clearIdentity, type NodeIdentity } from "./fingerprintManager.js";
 
 // Electron 主进程：创建窗口、系统托盘（最小化到托盘），后台运行节点逻辑。
 // ESM 主进程（package.json type=module）无 __dirname，由 import.meta.url 推导。

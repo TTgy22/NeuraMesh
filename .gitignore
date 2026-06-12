@@ -32,3 +32,7 @@ dist/
 dist-main/
 .vite/
 *.tsbuildinfo
+
+# Release artifacts
+release/
+*.zip
