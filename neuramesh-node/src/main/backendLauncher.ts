@@ -26,6 +26,23 @@ async function probe(timeoutMs = 1500): Promise<boolean> {
   }
 }
 
+/** 寻找 java：优先发布包内置精简 JRE（jre\bin\java.exe，免装 Java），回退系统 PATH。 */
+function findJavaCmd(): string {
+  const exeDir = path.dirname(app.getPath("exe"));
+  const candidates = [
+    path.join(exeDir, "..", "jre", "bin", "java.exe"),
+    path.join(exeDir, "..", "..", "jre", "bin", "java.exe"),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      // 继续候选
+    }
+  }
+  return "java";
+}
+
 /** 在 exe 同级及上两级目录中寻找后端 jar（发布包：exe 在 NeuraMesh-Node-win32-x64\，jar 在上一级）。 */
 function findBackendJar(): string | null {
   const exeDir = path.dirname(app.getPath("exe"));
@@ -61,11 +78,12 @@ export async function ensureBackend(): Promise<LaunchResult> {
     return "no-jar";
   }
 
+  const javaCmd = findJavaCmd();
   const logPath = path.join(app.getPath("userData"), "backend.log");
   const logFd = fs.openSync(logPath, "a");
-  console.log(`[launcher] 拉起后端: java -jar ${jar}（日志 ${logPath}）`);
+  console.log(`[launcher] 拉起后端: ${javaCmd} -jar ${jar}（日志 ${logPath}）`);
   spawnFailed = false;
-  backendProc = spawn("java", ["-jar", jar], {
+  backendProc = spawn(javaCmd, ["-jar", jar], {
     stdio: ["ignore", logFd, logFd],
     windowsHide: true,
   });
