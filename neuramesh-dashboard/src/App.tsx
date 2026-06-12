@@ -34,6 +34,13 @@ export function App() {
     else setMe(null);
   }, [loggedIn]);
 
+  // 任意请求遇 401（token 过期 / 链重置后用户不存在）→ api 层已清 token，这里同步 UI 登录态
+  useEffect(() => {
+    const onLogout = () => { setLoggedIn(false); setMe(null); };
+    window.addEventListener("neura:logout", onLogout);
+    return () => window.removeEventListener("neura:logout", onLogout);
+  }, []);
+
   if (intro) return <PixelIntro onDone={() => setIntro(false)} />;
 
   function logout() { auth.clear(); setLoggedIn(false); }

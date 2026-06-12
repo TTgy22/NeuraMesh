@@ -29,7 +29,8 @@ public class UserController {
         }
         Map<String, Object> profile = userService.profile(principal.userId());
         if (profile == null) {
-            return ApiResponse.error(404, "用户不存在");
+            // JWT 验签通过但链上无此用户（链已重置）：凭证失效，前端应清除登录态
+            return ApiResponse.error(401, "登录已失效（链上用户不存在），请重新登录");
         }
         return ApiResponse.ok(profile);
     }
@@ -39,6 +40,11 @@ public class UserController {
         if (principal == null) {
             return ApiResponse.error(401, "未认证");
         }
-        return ApiResponse.ok(Map.of("balance", userService.balance(principal.userId())));
+        long balance = userService.balance(principal.userId());
+        if (balance < 0) {
+            // -1 = 链上用户不存在（链已重置）：按凭证失效处理，避免前端拿到幽灵余额
+            return ApiResponse.error(401, "登录已失效（链上用户不存在），请重新登录");
+        }
+        return ApiResponse.ok(Map.of("balance", balance));
     }
 }

@@ -1,41 +1,45 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../api";
 import { axis, CHART, tooltipStyle } from "../chartConfig";
+import { subscribeThroughput, type ThroughputSample } from "../throughputStore";
 
-interface Sample { t: string; tps: number; blocks: number; }
-
-// bloomberg-terminal：实时吞吐折线 + 面积。客户端 5s 轮询区块高度，差分计算 TPS，缓存最近 50 点。
+// bloomberg-terminal：实时吞吐折线 + 面积。采样由模块级单例（throughputStore）后台常驻执行，
+// 组件仅订阅渲染 —— 切换页面不清零、不断采。链为交易驱动出块：无操作时 TPS 为 0；
+// 可开启"演示流量"（后端定时提交真实互转交易）让曲线持续波动。
 export function ThroughputChart() {
-  const [series, setSeries] = useState<Sample[]>([]);
-  const last = useRef<{ height: number; ts: number } | null>(null);
+  const [series, setSeries] = useState<ThroughputSample[]>([]);
+  const [demoOn, setDemoOn] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    const tick = async () => {
-      try {
-        const stats = await api.stats();
-        const now = Date.now();
-        if (last.current) {
-          const dh = stats.blockHeight - last.current.height;
-          const dt = Math.max(1, (now - last.current.ts) / 1000);
-          const tps = Math.max(0, dh / dt);
-          const label = new Date(now).toLocaleTimeString("zh-CN", { hour12: false });
-          setSeries((prev) => [...prev, { t: label, tps: Number(tps.toFixed(2)), blocks: stats.blockHeight }].slice(-50));
-        }
-        last.current = { height: stats.blockHeight, ts: now };
-      } catch { /* 后端未启动 */ }
-    };
-    tick();
-    const t = setInterval(tick, 5000);
-    return () => clearInterval(t);
+    api.demoTrafficStatus().then((s) => setDemoOn(s.enabled)).catch(() => { /* 后端未启动 */ });
+    return subscribeThroughput(setSeries);
   }, []);
+
+  async function toggleDemo() {
+    setToggling(true);
+    try {
+      const s = await api.setDemoTraffic(!demoOn);
+      setDemoOn(s.enabled);
+    } catch { /* 后端未启动 */ } finally {
+      setToggling(false);
+    }
+  }
 
   return (
     <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: "var(--space-3)" }}>
-      <div className="display" style={{ marginBottom: "var(--space-2)" }}>
-        网络吞吐 <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>· 5s 采样 · tx/s</span>
+      <div className="display" style={{ marginBottom: "var(--space-2)", display: "flex", alignItems: "center" }}>
+        网络吞吐 <span className="mono" style={{ fontSize: 11, color: "var(--muted)", marginLeft: 6 }}>· 5s 采样 · tx/s · 交易驱动出块</span>
+        <button onClick={toggleDemo} disabled={toggling} title="开启后后端定时提交小额真实互转交易（非前端模拟），驱动持续出块"
+          style={{ marginLeft: "auto", fontSize: 11, padding: "2px 10px", borderRadius: 999, cursor: "pointer",
+            border: `1px solid ${demoOn ? "var(--accent)" : "var(--border)"}`,
+            background: demoOn ? "var(--panel-2)" : "transparent",
+            color: demoOn ? "var(--accent)" : "var(--muted)", transition: "200ms ease-out" }}>
+          {demoOn ? "● 演示流量 开" : "○ 演示流量 关"}
+        </button>
       </div>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={series} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>

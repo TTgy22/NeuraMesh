@@ -7,14 +7,20 @@ export function BuyModal({ group, onClose, onPurchased }: {
 }) {
   const [hours, setHours] = useState(24);
   const [balance, setBalance] = useState<number | null>(null);
+  const [balanceErr, setBalanceErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<PurchaseReceipt | null>(null);
 
-  useEffect(() => { api.myBalance().then((b) => setBalance(b.balance)).catch(() => setBalance(null)); }, []);
+  useEffect(() => {
+    api.myBalance()
+      .then((b) => { setBalance(b.balance); setBalanceErr(null); })
+      .catch((e) => { setBalance(null); setBalanceErr((e as Error).message || "余额获取失败，请重新登录"); });
+  }, []);
 
   const totalCost = group.pricePerHour * hours;
-  const affordable = balance == null || balance >= totalCost;
+  // 余额未知（接口失败/登录失效）时禁止购买，杜绝幽灵下单
+  const affordable = balance != null && balance >= totalCost;
 
   async function confirm() {
     setBusy(true); setErr(null);
@@ -65,7 +71,9 @@ export function BuyModal({ group, onClose, onPurchased }: {
               <Row label="购买后余额" value={balance == null ? "—" : `${(balance - totalCost).toLocaleString()} NMT`} />
             </div>
 
-            {!affordable && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>余额不足</div>}
+            {balanceErr && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>{balanceErr}</div>}
+            {!balanceErr && balance != null && !affordable
+              && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>余额不足</div>}
             {err && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>{err}</div>}
 
             <div style={{ display: "flex", gap: 8, marginTop: "var(--space-4)" }}>
@@ -75,7 +83,7 @@ export function BuyModal({ group, onClose, onPurchased }: {
                 style={{ flex: 2, padding: "var(--space-3)", borderRadius: 6, border: "none",
                   background: affordable ? "var(--accent)" : "var(--border)", color: "oklch(15% 0.02 200)",
                   cursor: affordable ? "pointer" : "not-allowed", fontWeight: 600 }}>
-                {busy ? "扣款中…" : "确认购买"}
+                {busy ? "扣款中…" : balance == null ? "余额不可用" : "确认购买"}
               </button>
             </div>
           </>

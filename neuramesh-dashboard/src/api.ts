@@ -22,6 +22,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (auth.token) headers["Authorization"] = `Bearer ${auth.token}`;
   const res = await fetch(BASE + path, { headers: { ...headers, ...(init?.headers as any) }, ...init });
   const json = (await res.json()) as ApiResponse<T>;
+  if (json.code === 401 && auth.token) {
+    // 凭证失效（token 过期 / 后端链重置后用户不存在）：清除登录态并广播，避免幽灵登录与陈旧余额
+    auth.clear();
+    window.dispatchEvent(new Event("neura:logout"));
+  }
   if (json.code !== 0) throw new Error(json.message);
   return json.data;
 }
@@ -70,6 +75,9 @@ export const api = {
   nodeList: () => call<NodeStatus[]>(`/node/list`),
   tx: (hash: string) => call<TxInfo>(`/chain/tx/${hash}`),
   txStatus: (hash: string) => call<{ hash: string; status: string }>(`/chain/tx/${hash}/status`),
+  demoTrafficStatus: () => call<{ enabled: boolean }>(`/chain/demo-traffic`),
+  setDemoTraffic: (enabled: boolean) =>
+    call<{ enabled: boolean }>(`/chain/demo-traffic?enabled=${enabled}`, { method: "POST" }),
   submitTask: (vendorId: string, taskType: string, budget: number) =>
     call<TaskStatus>(`/task/submit`, { method: "POST", body: JSON.stringify({ vendorId, taskType, budget }) }),
   taskStatus: (id: string) => call<TaskStatus>(`/task/${id}/status`),
