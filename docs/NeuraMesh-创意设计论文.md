@@ -246,7 +246,176 @@ flowchart BT
 
 ---
 
-## 六、性能测试与质量保障
+## 六、核心源代码展示
+
+以下代码均摘自项目仓库真实实现（保留原始注释），对应第二章的创新点。
+
+### 6.1 状态机：快照回滚 + nonce 防重放（`StateMachine.apply`）
+
+一切链上业务的执行入口。先快照、后执行、失败整体回滚，保证任意交易失败不留半程状态；nonce 严格递增杜绝重放与双花。
+
+```java
+public synchronized byte[] apply(Transaction tx, GlobalState state) {
+    TransactionProcessor processor = processors.get(tx.getType());
+    if (processor == null) {
+        throw new VMException(VMException.Kind.UNKNOWN_TX_TYPE, "无处理器: " + tx.getType());
+    }
+    GlobalState snapshot = state.snapshot();          // ① 执行前快照
+    try {
+        AccountState from = state.getOrCreateAccount(tx.getFrom());
+        if (tx.getNonce() != from.getNonce()) {       // ② nonce 防重放
+            throw new VMException(VMException.Kind.DUPLICATE_NONCE,
+                    "nonce 不匹配: 期望 " + from.getNonce() + "，实际 " + tx.getNonce());
+        }
+        processor.process(tx, state);                 // ③ 业务处理器
+        from.incrementNonce();
+        return state.commit();                        // ④ 新 Merkle 状态根
+    } catch (VMException e) {
+        state.restoreFrom(snapshot);                  // ⑤ 任意失败整体回滚
+        throw e;
+    }
+}
+```
+
+### 6.2 零误差守恒分账（`TaskSettleProcessor`）
+
+整数比例分配必然产生舍入损耗，本设计将余数补给权重最大的节点，使 **Σ分配额 ≡ totalFee** 精确成立，全网代币总量恒定。
+
+```java
+// 先扣厂商余额（不足则抛出，状态机回滚）
+AccountState payer = state.getOrCreateAccount(tx.getFrom());
+payer.debit(p.totalFee());
+
+// 整数比例分配，余数补给权重最大者，确保精确守恒
+long distributed = 0;
+int maxIdx = 0;
+for (int i = 0; i < allocs.size(); i++) {
+    if (allocs.get(i).weight() > allocs.get(maxIdx).weight()) {
+        maxIdx = i;
+    }
+    long share = Math.floorDiv(
+            Math.multiplyExact(p.totalFee(), allocs.get(i).weight()), totalWeight);
+    creditNode(state, allocs.get(i).nodeId(), share);
+    distributed += share;
+}
+long remainder = p.totalFee() - distributed;
+if (remainder > 0) {
+    creditNode(state, allocs.get(maxIdx).nodeId(), remainder);   // 余数补齐
+}
+```
+
+### 6.3 设备指纹终身绑定 + 兜底分组（`NodeRegisterProcessor`）
+
+指纹链上全局去重实现"一设备一身份"；注册即赋初始权重并兜底加入默认资源组，从机制上消灭"无合格节点"的空窗期。
+
+```java
+if (state.getNode(nodeId) != null) {
+    throw new VMException(VMException.Kind.DUPLICATE_REGISTRATION, "节点已注册");
+}
+if (state.isFingerprintRegistered(p.fingerprint())) {            // 指纹全局去重（防女巫）
+    throw new VMException(VMException.Kind.DUPLICATE_REGISTRATION, "设备指纹已被注册");
+}
+
+// 注册即赋初始权重：硬件分下限 1 → totalWeight > 0，避免组内结算"无合格节点"
+NodeState node = new NodeState(nodeId, p.fingerprint());
+node.setScores(Math.max(p.hardwareScore(), 1.0), 0, 0, 0);
+state.putNode(node);
+state.registerFingerprint(p.fingerprint());
+
+// 加入资源组；未指定时兜底默认组（不存在则确定性自动创建，所有副本一致）
+String groupId = p.resourceGroupId().isBlank() ? DEFAULT_GROUP_ID : p.resourceGroupId();
+if (p.resourceGroupId().isBlank()) {
+    ensureDefaultGroup(state);
+}
+joinGroup(state, CryptoUtils.toHex(nodeId), groupId, p.hardwareScore(), tx.getTimestamp());
+```
+
+### 6.4 见证人交叉背书（`WeightUpdateValidator.validate`）
+
+单节点无法自改权重：分数必须获得 ≥2 个**不同验证者**的一致签名背书；申报不一致的见证者进入偏差名单，由处理器对其执行质量分降权（×0.9）。
+
+```java
+// 1) 过滤：签名有效 + 验证者存在 + 验证者去重
+Map<String, Attestation> validByValidator = new LinkedHashMap<>();
+for (Attestation a : payload.attestations()) {
+    Validator v = validators.getByNodeId(a.validatorId());
+    if (v == null) continue;
+    byte[] signing = Attestation.signingBytes(target, a.claimedScore());
+    if (!CryptoUtils.verify(signing, a.signature(), v.getPublicKey())) continue;
+    validByValidator.putIfAbsent(a.validatorIdHex(), a);
+}
+if (validByValidator.size() < 2) {
+    return Result.reject();
+}
+// 2) 按声明分数聚类，寻找 >= 2 个一致的分数；其余记入偏差名单
+for (Attestation candidate : valid) {
+    List<Attestation> agree = ...;   // |score - candidate.score| <= 1e-9
+    if (agree.size() >= 2) {
+        List<String> deviating = ...;  // 与一致值不符的见证者
+        return new Result(true, candidate.claimedScore(), deviating);
+    }
+}
+return Result.reject();
+```
+
+### 6.5 PBFT 提案校验与等价物检测（`BFTConsensus.handlePrePrepare`）
+
+对提案执行"提案人合法性 → 签名有效性 → 等价物（同高度冲突区块）"三重校验，检测到提案人两面派行为立即触发视图变更。
+
+```java
+private void handlePrePrepare(PrePrepare pp) {
+    if (pp.getHeight() != currentHeight) return;
+    Validator expected = currentProposer();                        // 加权轮询选出的合法提案人
+    if (!Arrays.equals(expected.getNodeId(), pp.getProposerId())) {
+        LOG.warn("[{}] 提案人不匹配，拒绝 h={}", shortId(), pp.getHeight());
+        return;
+    }
+    if (!pp.verify(validators)) {                                  // 提案签名验证
+        return;
+    }
+    byte[] blockHash = pp.getBlock().getHash();
+    byte[] prevAccepted = acceptedProposalHash.get(pp.getHeight());
+    if (prevAccepted != null) {
+        if (!Arrays.equals(prevAccepted, blockHash)) {             // 同高度第二个不同区块
+            equivocationCount.incrementAndGet();
+            triggerViewChange();                                   // 等价物 → 视图变更
+        }
+        return;
+    }
+    acceptedProposalHash.put(pp.getHeight(), blockHash);
+    state = ConsensusState.PREPARING;
+    sendPrepare(blockHash);                                        // 进入 Prepare 阶段
+    checkPrepareQuorum(blockHash);                                 // 乱序投票补判
+    checkCommitQuorum(blockHash);
+}
+```
+
+### 6.6 全局状态 Merkle 承诺（`GlobalState.commit`）
+
+账户、节点、资源组、成员关系、用户五类状态按键排序后构建 Merkle 树，任何一个字段变化都会改变全局状态根——为轻客户端校验与跨副本一致性提供密码学承诺。
+
+```java
+public byte[] commit() {
+    List<byte[]> leaves = new ArrayList<>();
+    for (Map.Entry<String, AccountState> e : new TreeMap<>(accounts).entrySet()) {
+        leaves.add(ByteUtils.concat(("A:" + e.getKey()).getBytes(UTF_8),
+                ByteUtils.longToBytes(e.getValue().getBalance()),
+                ByteUtils.longToBytes(e.getValue().getNonce())));
+    }
+    for (Map.Entry<String, NodeState> e : new TreeMap<>(nodes).entrySet()) {
+        leaves.add(ByteUtils.concat(("N:" + e.getKey()).getBytes(UTF_8),
+                ByteUtils.longToBytes(Double.doubleToLongBits(e.getValue().getTotalWeight())),
+                ByteUtils.longToBytes(e.getValue().getTotalEarned())));
+    }
+    leaves.addAll(resourceGroups.commitLeaves());   // G:/M: 资源组与成员叶子
+    // U: 用户叶子 ...
+    return new MerkleTree(leaves).getRoot();        // 确定性全局状态根
+}
+```
+
+---
+
+## 七、性能测试与质量保障
 
 | 指标 | 实测值 | 说明 |
 |---|---|---|
@@ -262,7 +431,7 @@ flowchart BT
 
 ---
 
-## 七、不足与展望
+## 八、不足与展望
 
 | 当前限制 | 展望方案 |
 |---|---|
